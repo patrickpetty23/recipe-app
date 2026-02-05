@@ -1,0 +1,29 @@
+# AI working space (local process artifacts)
+ai/guides/
+ai/notes/
+ai/roadmaps/
+
+# Tool-specific config (personal workflow)
+claude.md
+.cursorrules
+
+# Test environment (may contain secrets)
+.testEnvVars
+
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# Environment
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+build/
+DerivedData/
