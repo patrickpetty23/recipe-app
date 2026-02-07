@@ -30,7 +30,7 @@ Everything in this MVP serves that single validation. Everything else waits.
 - Apple Vision framework (on-device)
 - Extract ingredient name, quantity, unit
 - Support standard ingredient list formatting
-- **Target:** 80% accuracy on clean cookbook pages
+- **Target:** 95% field accuracy (name, quantity, unit extracted correctly)
 
 #### 3. Edit Mode
 - Simple list view of extracted ingredients
@@ -50,16 +50,22 @@ Everything in this MVP serves that single validation. Everything else waits.
 - View list of saved recipes
 - Re-open previous recipes
 
+#### 6. Multi-Recipe Preview (Lightweight)
+- "Scan another recipe?" prompt after first scan
+- Basic merge view showing combined ingredients
+- Simple duplicate detection (exact string match only)
+- **Goal:** Tease the power of multi-recipe without full feature complexity
+
 ---
 
 ## 🚫 EXPLICITLY NOT IN MVP
 
 | Feature | Why It's Out | When It Comes In |
 |---------|--------------|------------------|
-| Multi-recipe merging | Adds complexity, requires merge logic | Phase 2 |
-| Duplicate detection | Requires multi-recipe first | Phase 2 |
+| Full multi-recipe workflow | Phase 1 has lightweight preview only | Phase 2 |
+| Advanced duplicate detection | Phase 1 uses exact match only | Phase 2 |
+| Unit conversions | Complex, requires database, not core value | Phase 3+ |
 | Apple Notes export | Distribution, not core value | Phase 3 |
-| Unit conversions | Requires database, not proven needed yet | Phase 2/3 |
 | Online recipe support (screenshots/URLs) | Expansion, not validation | Phase 3 |
 | Recipe categories/tags | Organization, not core loop | Phase 2+ |
 | Cloud sync | Local-first for MVP | Phase 2+ |
@@ -93,9 +99,10 @@ Everything in this MVP serves that single validation. Everything else waits.
 
 ### Must Pass (Go/No-Go)
 - [ ] User can scan a recipe and generate a list in <30 seconds
-- [ ] OCR extracts ingredients with ≥80% accuracy (on clean pages)
+- [ ] OCR extracts ≥95% of fields correctly (name, quantity, unit on clean pages)
 - [ ] User can fix extraction errors in <10 seconds
 - [ ] User completes at least 1 actual shopping trip using the app
+- [ ] Multi-recipe preview successfully merges 2-3 recipes
 - [ ] App works offline (no internet required for core features)
 
 ### Validation Questions (Ask Users After 1 Week)
@@ -146,11 +153,11 @@ Everything in this MVP serves that single validation. Everything else waits.
 ## What Happens After MVP
 
 ### If MVP Validates (Users Love It)
-→ **Phase 2: Multi-Recipe**
-- Scan multiple recipes
-- Smart merge & duplicate detection
-- Recipe library improvements
-- Basic unit conversions
+→ **Phase 2: Full Multi-Recipe**
+- Full multi-recipe workflow (not just preview)
+- Advanced fuzzy duplicate detection
+- Recipe library improvements (search, tags, categories)
+- Better merge UI with conflict resolution
 
 ### If MVP Fails
 → **Pivot or Kill**

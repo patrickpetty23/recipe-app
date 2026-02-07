@@ -57,6 +57,7 @@ The app eliminates the tedious manual process of:
    - Use Apple Vision framework (on-device for speed/privacy)
    - Extract ingredient names, quantities, and units
    - Support common cookbook formats (ingredient lists, inline ingredients)
+   - **Target: 95% field accuracy** (name, quantity, unit extracted correctly)
 
 3. **Structured Output**
    - Display ingredients in clean, organized list format
@@ -73,39 +74,49 @@ The app eliminates the tedious manual process of:
    - Persistent state (saved locally)
    - Clear markers for completed items
 
+6. **Multi-Recipe Preview (Lightweight)**
+   - Prompt to scan additional recipes after first scan
+   - Basic merge view combining ingredients from 2-3 recipes
+   - Simple exact-match duplicate detection
+   - Teases multi-recipe power without full feature complexity
+
 ### 3.2 Phase 2: Multi-Recipe (Core Differentiator)
 
-1. **Multi-Recipe Mode**
-   - Scan and save 3-5 recipes
+1. **Full Multi-Recipe Workflow**
+   - Expand beyond Phase 1 preview to full multi-recipe management
+   - Scan and organize 5+ recipes
    - View individual recipe lists
-   - Combine into master shopping list
+   - Combine into master shopping list with better UX
 
-2. **Smart Merge & Deduplication**
-   - Detect duplicate ingredients across recipes
-   - Merge quantities intelligently
+2. **Advanced Smart Merge & Deduplication**
+   - Fuzzy matching for duplicate detection ("garlic clove" vs "garlic")
+   - Merge quantities intelligently with conflict resolution
    - Visual indicators for shared ingredients
+   - Handle measurement inconsistencies
 
-3. **Recipe Library**
+3. **Recipe Library Improvements**
    - Save scanned recipes for re-use
    - Search/filter saved recipes
-   - Simple tagging system
-
-4. **Basic Unit Conversions**
-   - Convert recipe measurements to standard grocery sizes
-   - Example: "2 cups flour" → "1 (5 lb) bag flour"
-   - Database of common ingredient-to-package mappings
+   - Tagging and categorization system
+   - Recipe collections/folders
 
 ### 3.3 Phase 3: Expansion
 
-1. **Export to Apple Notes**
+1. **Unit Conversions** (Moved from Phase 2)
+   - Convert recipe measurements to standard grocery sizes
+   - Example: "2 cups flour" → "1 (5 lb) bag flour"
+   - Database of common ingredient-to-package mappings
+   - Only add if validated user need
+
+2. **Export to Apple Notes**
    - Share sheet integration
    - Export as formatted checklist
 
-2. **Online Recipe Support**
+3. **Online Recipe Support**
    - Screenshot parsing (detect ingredients from screenshots)
    - URL input for supported recipe sites
 
-3. **Manual Entry**
+4. **Manual Entry**
    - Text input for recipes that won't scan
 
 ### 3.4 Phase 4: Advanced (Validated Need Only)
@@ -126,9 +137,10 @@ The app eliminates the tedious manual process of:
 ## 4. Non-Functional Requirements
 
 ### 4.1 Performance
-- **OCR Accuracy:** 80%+ on common cookbook formats
+- **OCR Accuracy:** 95%+ field accuracy (name, quantity, unit) on common cookbook formats
 - **Scan-to-List Time:** <15 seconds from capture to editable list
 - **Edit Mode:** User can fix errors in <10 seconds
+- **Multi-Recipe Merge:** <3 seconds to combine 2-3 recipes
 - **App Launch:** <2 seconds cold start
 
 ### 4.2 Quality
@@ -152,7 +164,8 @@ The app eliminates the tedious manual process of:
 
 ### 5.1 MVP Success Criteria
 - User completes at least 1 shopping trip with app-generated list
-- 80%+ OCR accuracy in real-world testing
+- 95%+ OCR field accuracy in real-world testing
+- Multi-recipe preview successfully merges 2-3 recipes with basic duplicate detection
 - User retention: 50%+ return within 1 week
 
 ### 5.2 Product-Market Fit Indicators
@@ -196,10 +209,10 @@ The app eliminates the tedious manual process of:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| OCR accuracy insufficient | Medium | High | Build robust edit mode; iterate on Vision framework config; add GPT-4 Vision fallback |
-| Users don't trust AI extraction | Medium | High | Add verification step; highlight confidence scores; make editing frictionless |
+| OCR accuracy insufficient for 95% target | Medium | High | Build robust edit mode; iterate on Vision framework config; add GPT-4 Vision fallback; allow user feedback to improve model |
+| Users don't trust AI extraction | Medium | High | Show confidence indicators; make editing frictionless; multi-recipe preview builds trust through usefulness |
 | Apple Notes integration too limited | Medium | Medium | Build strong in-app list first; Notes is Phase 3 anyway |
-| Multi-recipe merge logic too complex | Medium | Medium | Start simple (exact string match); iterate on fuzzy matching |
+| Multi-recipe merge preview doesn't hook users | Medium | High | Keep it simple (exact match only); focus on "wow, it combined them!" moment; iterate based on feedback |
 | Market too small (only physical book users) | Low | High | Plan for online recipe expansion (screenshots, URLs) in Phase 3 |
 
 ---

@@ -19,12 +19,13 @@
 
 ## Important Notes
 - All recipe parsing must be local-first for privacy and speed
-- OCR accuracy target: 80%+ on common cookbook formats
+- OCR accuracy target: 95%+ field accuracy (name, quantity, unit)
 - Target scan-to-list time: <15 seconds
 - User should be able to fix OCR errors in <10 seconds
 - Multi-recipe with overlap detection is the core differentiator
+- Phase 1 includes lightweight multi-recipe preview (2-3 recipes, exact match duplicates)
+- Unit conversions removed from MVP entirely — add only if validated need
 - Apple Notes export is Phase 3 — validate the core loop first
-- Keep MVPs scoped: single recipe first, then multi-recipe, then features
 
 ## Current Focus
-Building an AI-powered iOS recipe scanner that converts physical cookbook recipes into structured shopping lists. Starting with single-recipe MVP to validate OCR workflow, then expanding to multi-recipe with smart ingredient merging and overlap detection.
+Building an AI-powered iOS recipe scanner that converts physical cookbook recipes into structured shopping lists. Phase 1 MVP includes single-recipe workflow PLUS lightweight multi-recipe preview (2-3 recipes with basic exact-match duplicate detection) to tease the power of the full multi-recipe feature coming in Phase 2.

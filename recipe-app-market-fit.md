@@ -53,15 +53,17 @@ An AI-powered recipe scanner that converts any recipe (starting with physical co
 **Single Recipe → Shopping List**
 
 1. **Camera Scan** — Point camera at recipe page, capture image
-2. **OCR + Parse** — Extract ingredients and format as clean list
+2. **OCR + Parse** — Extract ingredients and format as clean list (95% field accuracy target)
 3. **Edit Mode** — Let user fix any extraction errors
-4. **Shopping List** — Save to app's internal shopping list
-5. **Checklist View** — Simple checkbox UI for grocery shopping
+4. **Multi-Recipe Preview** — Prompt to scan another recipe, basic merge with exact-match duplicates
+5. **Shopping List** — Save to app's internal shopping list
+6. **Checklist View** — Simple checkbox UI for grocery shopping
 
 **Success Metrics:**
-- 80%+ OCR accuracy on common cookbook formats
+- 95%+ field accuracy (name, quantity, unit) on common cookbook formats
 - <15s from scan → editable list
 - User can fix errors in <10 seconds
+- Multi-recipe preview successfully merges 2-3 recipes
 - User completes at least 1 shopping trip with the list
 
 ---
@@ -69,27 +71,27 @@ An AI-powered recipe scanner that converts any recipe (starting with physical co
 ### Phase 2: Multi-Recipe (Core Value) (4-5 weeks)
 **The Real Differentiator**
 
-- [ ] Multi-recipe mode — scan 3-5 recipes
-- [ ] Smart merge — combine ingredients across recipes
-- [ ] Duplicate detection — "garlic" used in 3 dishes = buy once
-- [ ] Recipe library — save scans for later re-use
-- [ ] Basic unit conversions (cups → standard grocery sizes)
+- [ ] Full multi-recipe workflow — expand beyond Phase 1 preview
+- [ ] Advanced fuzzy duplicate detection — "garlic clove" vs "garlic"
+- [ ] Better merge UI with conflict resolution
+- [ ] Recipe library improvements — search, tags, categories
 
 **Why This Matters:**
-This is where you go from "neat trick" to "can't live without it." Single recipe isn't that much better than typing. Multi-recipe with overlap detection is 10x better.
+Phase 1 previews multi-recipe to hook users early. Phase 2 goes from "neat trick" to "can't live without it" with full multi-recipe workflow, advanced fuzzy matching, and better UX.
 
 ---
 
 ### Phase 3: Export & More Inputs (2-3 weeks)
 **Nice-to-Haves**
 
+- [ ] Unit conversions (only if validated need — moved from Phase 2)
 - [ ] Export to Apple Notes (via Share Sheet/Shortcuts)
 - [ ] Screenshot parsing (online recipes)
 - [ ] URL support (paste link → auto-fetch ingredients)
 - [ ] Manual text entry
 
 **Why These Wait:**
-Apple Notes is distribution, not core value. Online recipes are expansion, not beachhead. Prove the core loop first.
+Unit conversions require complex database and aren't core value (users can read raw measurements). Apple Notes is distribution, not core value. Online recipes are expansion, not beachhead. Prove the core loop first.
 
 ---
 
