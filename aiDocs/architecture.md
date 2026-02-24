@@ -41,7 +41,7 @@
 
 | Component | Responsibility |
 |-----------|---------------|
-| **CameraView** | Capture recipe images, preview, trigger OCR |
+| **CameraView** | Capture recipe images via camera (physical cookbooks) or photo library import (digital screenshots from TikTok, websites, Instagram, etc.), preview, trigger OCR |
 | **OCRService** | Vision framework integration, image preprocessing, text extraction |
 | **IngredientParser** | Parse OCR text into structured ingredients (name, quantity, unit) |
 | **RecipeManager** | CRUD operations for recipes, multi-recipe merging |
@@ -273,11 +273,137 @@ class IngredientParser {
 }
 ```
 
+### 3.4 LLM Fallback (GPT-4 Vision)
+
+When the Vision framework OCR confidence falls below 70%, the image can optionally be sent to the GPT-4 Vision API for extraction. This provides a second-pass extraction path that is especially useful for:
+
+- **Digital screenshots** (TikTok, websites, Instagram) with complex layouts, overlays, or non-standard formatting that the rule-based parser struggles with
+- **Stylized cookbook pages** with decorative fonts or unusual ingredient list structures
+- **Low-confidence Vision results** where the on-device OCR is uncertain
+
+**Configuration:**
+- LLM fallback is an **optional, user-configurable** feature (off by default)
+- Users can enable it in Settings; the app should clearly indicate when an image will be sent off-device
+- When enabled, fallback triggers automatically when Vision confidence < 70%
+
+**Privacy Note:** Sending images to the GPT-4 Vision API means recipe images leave the device and are processed by OpenAI's servers. The app must clearly disclose this to the user before enabling the feature, and should never send images off-device without explicit user consent.
+
 ---
 
-## 4. Multi-Recipe Merge Logic (Phase 1 - Lightweight)
+## 4. UI Architecture
 
-### 4.1 Exact Match Duplicate Detection
+### 4.1 View Hierarchy
+
+```
+ContentView (Root)
+├── CameraView
+│   ├── Camera preview layer
+│   ├── Capture button
+│   └── Gallery picker
+├── EditModeView
+│   ├── Ingredient list (editable)
+│   ├── Add/Remove buttons
+│   └── Save to shopping list
+└── ShoppingListView
+    ├── Checklist UI
+    ├── Check/uncheck items
+    └── Clear/reset buttons
+```
+
+### 4.2 State Management
+
+```swift
+@Observable
+class AppState {
+    var currentRecipe: Recipe?
+    var scannedRecipes: [Recipe] = []
+    var shoppingList: ShoppingList?
+    var isScanning: Bool = false
+    var showEditMode: Bool = false
+}
+```
+
+---
+
+## 5. Storage Layer (SwiftData)
+
+### 5.1 Schema Design
+
+- **Recipe** → one-to-many → **Ingredient**
+- **ShoppingList** → one-to-many → **ShoppingListItem**
+- **ShoppingListItem** → references → **Ingredient**
+
+### 5.2 Queries
+
+```swift
+// Fetch all recipes
+@Query(sort: \Recipe.createdAt, order: .reverse) var recipes: [Recipe]
+
+// Fetch active shopping list
+@Query(filter: #Predicate<ShoppingList> { !$0.isArchived }) var activeList: [ShoppingList]
+```
+
+---
+
+## 6. Error Handling
+
+### 6.1 OCR Failures
+
+- **Low confidence (<70%)**: Show warning banner; if LLM fallback is enabled, offer to send to GPT-4 Vision; allow user to retry
+- **No text detected**: Prompt user to adjust lighting/angle
+- **Vision framework error**: Fallback to manual entry option
+
+### 6.2 Parsing Errors
+
+- **Ambiguous quantity**: Show user the uncertain field, ask for clarification
+- **Unrecognized format**: Store raw text, let user edit manually
+
+---
+
+## 7. Performance Considerations
+
+### 7.1 Optimization Strategies
+
+- **On-device OCR**: No network latency, works offline
+- **Lazy loading**: Load recipe images only when needed
+- **Debouncing**: Prevent rapid repeated OCR calls during camera adjustment
+- **Caching**: Cache parsed ingredients to avoid re-parsing on app restart
+
+### 7.2 Memory Management
+
+- Store images as compressed Data (JPEG 80% quality)
+- Limit recipe history to 50 most recent (configurable)
+- Clear checked shopping list items after 24 hours (optional)
+
+---
+
+## 8. Testing Strategy
+
+### 8.1 Unit Tests
+
+- IngredientParser regex patterns
+- Merge logic (duplicate detection)
+- Quantity combination logic
+
+### 8.2 Integration Tests
+
+- OCR → Parse → Save pipeline
+- Multi-recipe merge flow
+- Shopping list state persistence
+
+### 8.3 Manual Testing
+
+- Test with real cookbooks (varied fonts, layouts)
+- Edge cases: handwritten recipes, angled photos, poor lighting
+- Performance: OCR speed on older devices (iPhone 12+)
+
+---
+
+## 9. Future Architecture Considerations (Post-MVP)
+
+### 9.1 Phase 2: Multi-Recipe Merge Logic
+
+Exact-match duplicate detection and basic quantity merging for combining ingredients across multiple scanned recipes.
 
 ```swift
 @Observable
@@ -290,7 +416,6 @@ class RecipeManager {
                 let key = ingredient.name.lowercased().trimmingCharacters(in: .whitespaces)
                 
                 if let existing = mergedIngredients[key] {
-                    // Duplicate found - combine quantities (simple string concatenation for MVP)
                     let combinedQuantity = combineQuantities(existing.quantity, ingredient.quantity)
                     existing.quantity = combinedQuantity
                 } else {
@@ -303,8 +428,6 @@ class RecipeManager {
     }
     
     private func combineQuantities(_ q1: String?, _ q2: String?) -> String? {
-        // Phase 1: Simple concatenation
-        // Phase 2: Smart arithmetic addition
         guard let q1 = q1, let q2 = q2 else {
             return q1 ?? q2
         }
@@ -313,137 +436,20 @@ class RecipeManager {
 }
 ```
 
-**Phase 2 Enhancement (Future):**
+**Phase 2 Enhancements:**
 - Fuzzy string matching ("garlic" vs "garlic clove" vs "minced garlic")
 - Quantity arithmetic (2 cups + 1 cup = 3 cups)
 - Unit normalization (1 tbsp + 3 tsp = 1 tbsp)
 
----
-
-## 5. UI Architecture
-
-### 5.1 View Hierarchy
-
-```
-ContentView (Root)
-├── CameraView
-│   ├── Camera preview layer
-│   ├── Capture button
-│   └── Gallery picker
-├── EditModeView
-│   ├── Ingredient list (editable)
-│   ├── Add/Remove buttons
-│   └── Save to shopping list
-├── MultiRecipePromptView (Phase 1)
-│   ├── "Scan another recipe?" prompt
-│   └── Merge preview
-└── ShoppingListView
-    ├── Checklist UI
-    ├── Check/uncheck items
-    └── Clear/reset buttons
-```
-
-### 5.2 State Management
-
-```swift
-@Observable
-class AppState {
-    var currentRecipe: Recipe?
-    var scannedRecipes: [Recipe] = []
-    var shoppingList: ShoppingList?
-    var isScanning: Bool = false
-    var showEditMode: Bool = false
-    var showMultiRecipePrompt: Bool = false
-}
-```
-
----
-
-## 6. Storage Layer (SwiftData)
-
-### 6.1 Schema Design
-
-- **Recipe** → one-to-many → **Ingredient**
-- **ShoppingList** → one-to-many → **ShoppingListItem**
-- **ShoppingListItem** → references → **Ingredient**
-
-### 6.2 Queries
-
-```swift
-// Fetch all recipes
-@Query(sort: \Recipe.createdAt, order: .reverse) var recipes: [Recipe]
-
-// Fetch active shopping list
-@Query(filter: #Predicate<ShoppingList> { !$0.isArchived }) var activeList: [ShoppingList]
-```
-
----
-
-## 7. Error Handling
-
-### 7.1 OCR Failures
-
-- **Low confidence (<70%)**: Show warning banner, allow user to retry
-- **No text detected**: Prompt user to adjust lighting/angle
-- **Vision framework error**: Fallback to manual entry option
-
-### 7.2 Parsing Errors
-
-- **Ambiguous quantity**: Show user the uncertain field, ask for clarification
-- **Unrecognized format**: Store raw text, let user edit manually
-
----
-
-## 8. Performance Considerations
-
-### 8.1 Optimization Strategies
-
-- **On-device OCR**: No network latency, works offline
-- **Lazy loading**: Load recipe images only when needed
-- **Debouncing**: Prevent rapid repeated OCR calls during camera adjustment
-- **Caching**: Cache parsed ingredients to avoid re-parsing on app restart
-
-### 8.2 Memory Management
-
-- Store images as compressed Data (JPEG 80% quality)
-- Limit recipe history to 50 most recent (configurable)
-- Clear checked shopping list items after 24 hours (optional)
-
----
-
-## 9. Testing Strategy
-
-### 9.1 Unit Tests
-
-- IngredientParser regex patterns
-- Merge logic (duplicate detection)
-- Quantity combination logic
-
-### 9.2 Integration Tests
-
-- OCR → Parse → Save pipeline
-- Multi-recipe merge flow
-- Shopping list state persistence
-
-### 9.3 Manual Testing
-
-- Test with real cookbooks (varied fonts, layouts)
-- Edge cases: handwritten recipes, angled photos, poor lighting
-- Performance: OCR speed on older devices (iPhone 12+)
-
----
-
-## 10. Future Architecture Considerations (Post-MVP)
-
-### Phase 2: Advanced Multi-Recipe
+### 9.2 Phase 2: Advanced Multi-Recipe
 - **Fuzzy matching service** (e.g., Levenshtein distance for ingredient names)
 - **Quantity arithmetic engine** (parse "2 1/2 cups" and calculate sums)
 
-### Phase 3: Cloud Sync
+### 9.3 Phase 3: Cloud Sync
 - **Backend**: Firebase or Supabase for cross-device sync
 - **Conflict resolution**: Last-write-wins for shopping list state
 
-### Phase 4: Advanced Features
+### 9.4 Phase 4: Advanced Features
 - **ML model**: Custom CoreML model for recipe-specific OCR (trained on cookbook layouts)
 - **Grocery store integration**: APIs for price tracking, store inventory
 

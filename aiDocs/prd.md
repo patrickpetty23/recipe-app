@@ -3,25 +3,26 @@
 
 **Version:** 1.0  
 **Date:** February 5, 2026  
-**Status:** Draft
+**Status:** In Review
 
 ---
 
 ## 1. Overview
 
 ### 1.1 Product Summary
-An AI-powered iOS application that enables users to scan recipes from physical cookbooks (and eventually online sources) and automatically generate structured shopping lists with intelligent merging, duplicate detection, and measurement conversion.
+An AI-powered iOS application that enables users to capture recipes from physical cookbooks or import screenshots from any digital source (TikTok, websites, Instagram, etc.) and automatically generate structured shopping lists with intelligent merging, duplicate detection, and measurement conversion.
 
 ### 1.2 Value Proposition
 **"I tell the app what I'm cooking, it tells me exactly what to buy."**
 
 The app eliminates the tedious manual process of:
-- Copying ingredients from recipe books
+- Copying ingredients from recipe books or screenshots
 - Converting measurements to grocery packaging
 - Cross-referencing shared ingredients across multiple recipes
 
 ### 1.3 Target Users
-- iPhone users who cook from physical cookbooks 3+ times per week
+- iPhone users who cook from physical cookbooks or digital recipes 3+ times per week
+- Users who save or screenshot recipes from TikTok, Instagram, websites, or other digital sources
 - Busy professionals and families who meal-plan
 - Users frustrated by creating manual shopping lists
 - People looking to reduce food waste from over-buying
@@ -49,15 +50,15 @@ The app eliminates the tedious manual process of:
 
 #### Single Recipe → Shopping List
 1. **Camera Scanning**
-   - Native iOS camera integration
+   - Native iOS camera integration for physical cookbook photos
    - Automatic capture on stable frame detection
-   - Photo library import option
+   - Photo library import for screenshots from any digital source (TikTok, websites, Instagram, etc.)
 
 2. **OCR & Ingredient Extraction**
    - Use Apple Vision framework (on-device for speed/privacy)
    - Extract ingredient names, quantities, and units
    - Support common cookbook formats (ingredient lists, inline ingredients)
-   - **Target: 95% field accuracy** (name, quantity, unit extracted correctly)
+   - **Target: 90% field accuracy** (name, quantity, unit extracted correctly)
 
 3. **Structured Output**
    - Display ingredients in clean, organized list format
@@ -74,16 +75,10 @@ The app eliminates the tedious manual process of:
    - Persistent state (saved locally)
    - Clear markers for completed items
 
-6. **Multi-Recipe Preview (Lightweight)**
-   - Prompt to scan additional recipes after first scan
-   - Basic merge view combining ingredients from 2-3 recipes
-   - Simple exact-match duplicate detection
-   - Teases multi-recipe power without full feature complexity
-
 ### 3.2 Phase 2: Multi-Recipe (Core Differentiator)
 
 1. **Full Multi-Recipe Workflow**
-   - Expand beyond Phase 1 preview to full multi-recipe management
+   - Multi-recipe preview and merge (scan additional recipes, combine ingredients)
    - Scan and organize 5+ recipes
    - View individual recipe lists
    - Combine into master shopping list with better UX
@@ -113,8 +108,7 @@ The app eliminates the tedious manual process of:
    - Export as formatted checklist
 
 3. **Online Recipe Support**
-   - Screenshot parsing (detect ingredients from screenshots)
-   - URL input for supported recipe sites
+   - URL input for supported recipe sites (auto-extraction without screenshot)
 
 4. **Manual Entry**
    - Text input for recipes that won't scan
@@ -137,10 +131,9 @@ The app eliminates the tedious manual process of:
 ## 4. Non-Functional Requirements
 
 ### 4.1 Performance
-- **OCR Accuracy:** 95%+ field accuracy (name, quantity, unit) on common cookbook formats
+- **OCR Accuracy:** 90%+ field accuracy (name, quantity, unit) on common cookbook formats and digital screenshots
 - **Scan-to-List Time:** <15 seconds from capture to editable list
 - **Edit Mode:** User can fix errors in <10 seconds
-- **Multi-Recipe Merge:** <3 seconds to combine 2-3 recipes
 - **App Launch:** <2 seconds cold start
 
 ### 4.2 Quality
@@ -164,8 +157,7 @@ The app eliminates the tedious manual process of:
 
 ### 5.1 MVP Success Criteria
 - User completes at least 1 shopping trip with app-generated list
-- 95%+ OCR field accuracy in real-world testing
-- Multi-recipe preview successfully merges 2-3 recipes with basic duplicate detection
+- 90%+ OCR field accuracy in real-world testing
 - User retention: 50%+ return within 1 week
 
 ### 5.2 Product-Market Fit Indicators
@@ -181,11 +173,11 @@ The app eliminates the tedious manual process of:
 ### 6.1 Constraints
 - **Platform:** iOS only (iPhone, iPad secondary)
 - **Apple Notes API:** Limited official API; may require Shortcuts workaround
-- **OCR Limitations:** Handwritten recipes, heavily stylized fonts may fail
+- **OCR Limitations:** Handwritten recipes, heavily stylized fonts, and low-resolution screenshots may fail
 
 ### 6.2 Assumptions
 - Users have iPhones with cameras capable of clear recipe photos
-- Physical cookbook users are willing to adopt digital tools
+- Users who save or screenshot digital recipes will benefit from structured extraction
 - Ingredient extraction accuracy will be "good enough" for MVP (users can edit)
 - Unit conversion database can be built incrementally (start with top 50 ingredients)
 
@@ -193,7 +185,7 @@ The app eliminates the tedious manual process of:
 
 ## 7. Out of Scope (Explicitly NOT in MVP)
 
-- Web scrapers for recipe sites (legal complexity, maintenance burden)
+- Web scrapers for recipe sites via URL (legal complexity, maintenance burden)
 - Recipe discovery/search functionality
 - Social features (sharing recipes, community)
 - Nutrition information extraction
@@ -209,11 +201,10 @@ The app eliminates the tedious manual process of:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| OCR accuracy insufficient for 95% target | Medium | High | Build robust edit mode; iterate on Vision framework config; add GPT-4 Vision fallback; allow user feedback to improve model |
-| Users don't trust AI extraction | Medium | High | Show confidence indicators; make editing frictionless; multi-recipe preview builds trust through usefulness |
+| OCR accuracy insufficient for 90% target | Medium | High | Build robust edit mode; iterate on Vision framework config; add GPT-4 Vision fallback; allow user feedback to improve model |
+| Users don't trust AI extraction | Medium | High | Show confidence indicators; make editing frictionless |
 | Apple Notes integration too limited | Medium | Medium | Build strong in-app list first; Notes is Phase 3 anyway |
-| Multi-recipe merge preview doesn't hook users | Medium | High | Keep it simple (exact match only); focus on "wow, it combined them!" moment; iterate based on feedback |
-| Market too small (only physical book users) | Low | High | Plan for online recipe expansion (screenshots, URLs) in Phase 3 |
+| Digital screenshots vary widely in layout/quality | Medium | Medium | LLM fallback (GPT-4 Vision) for complex layouts; robust edit mode as safety net |
 
 ---
 

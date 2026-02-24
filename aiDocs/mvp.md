@@ -3,7 +3,7 @@
 
 **Version:** 1.0  
 **Date:** February 5, 2026  
-**Status:** Locked
+**Status:** In Review
 
 ---
 
@@ -22,15 +22,15 @@ Everything in this MVP serves that single validation. Everything else waits.
 ### ✅ IN MVP (Phase 1)
 
 #### 1. Single Recipe Scanning
-- Point camera at cookbook page
-- Tap to capture photo
+- Point camera at physical cookbook page and tap to capture
+- Import photos from library: screenshots from TikTok, websites, Instagram, or any digital recipe source
 - Basic auto-capture when frame is stable (optional)
 
 #### 2. OCR & Ingredient Extraction
 - Apple Vision framework (on-device)
 - Extract ingredient name, quantity, unit
 - Support standard ingredient list formatting
-- **Target:** 95% field accuracy (name, quantity, unit extracted correctly)
+- **Target:** 90% field accuracy (name, quantity, unit extracted correctly)
 
 #### 3. Edit Mode
 - Simple list view of extracted ingredients
@@ -50,23 +50,18 @@ Everything in this MVP serves that single validation. Everything else waits.
 - View list of saved recipes
 - Re-open previous recipes
 
-#### 6. Multi-Recipe Preview (Lightweight)
-- "Scan another recipe?" prompt after first scan
-- Basic merge view showing combined ingredients
-- Simple duplicate detection (exact string match only)
-- **Goal:** Tease the power of multi-recipe without full feature complexity
-
 ---
 
 ## 🚫 EXPLICITLY NOT IN MVP
 
 | Feature | Why It's Out | When It Comes In |
 |---------|--------------|------------------|
-| Full multi-recipe workflow | Phase 1 has lightweight preview only | Phase 2 |
-| Advanced duplicate detection | Phase 1 uses exact match only | Phase 2 |
+| Multi-Recipe Preview | Scope creep for initial validation; Phase 2 only | Phase 2 |
+| Full multi-recipe workflow | Validate core single-recipe loop first | Phase 2 |
+| Advanced duplicate detection | Requires multi-recipe support | Phase 2 |
 | Unit conversions | Complex, requires database, not core value | Phase 3+ |
 | Apple Notes export | Distribution, not core value | Phase 3 |
-| Online recipe support (screenshots/URLs) | Expansion, not validation | Phase 3 |
+| Online recipe support (URL auto-extraction) | Expansion, not validation | Phase 3 |
 | Recipe categories/tags | Organization, not core loop | Phase 2+ |
 | Cloud sync | Local-first for MVP | Phase 2+ |
 | Social sharing | Nice-to-have | Future |
@@ -99,10 +94,9 @@ Everything in this MVP serves that single validation. Everything else waits.
 
 ### Must Pass (Go/No-Go)
 - [ ] User can scan a recipe and generate a list in <30 seconds
-- [ ] OCR extracts ≥95% of fields correctly (name, quantity, unit on clean pages)
+- [ ] OCR extracts ≥90% of fields correctly (name, quantity, unit on clean pages)
 - [ ] User can fix extraction errors in <10 seconds
 - [ ] User completes at least 1 actual shopping trip using the app
-- [ ] Multi-recipe preview successfully merges 2-3 recipes
 - [ ] App works offline (no internet required for core features)
 
 ### Validation Questions (Ask Users After 1 Week)
@@ -127,7 +121,7 @@ Everything in this MVP serves that single validation. Everything else waits.
 
 | Decision | Rationale |
 |----------|-----------|
-| Single recipe only | Validate core loop before building complexity |
+| Single recipe only (no multi-recipe) | Validate core loop before building complexity |
 | No Apple Notes export | In-app list is faster to build, tests core value first |
 | Local storage only | Faster to build, respects privacy, works offline |
 | Vision framework only | On-device, free, fast; add GPT-4 Vision fallback if needed |
@@ -172,5 +166,5 @@ Everything in this MVP serves that single validation. Everything else waits.
 - **PRD:** `aiDocs/prd.md` — Full product requirements across all phases
 - **Context:** `aiDocs/context.md` — Project overview and current focus
 - **Market Fit:** `recipe-app-market-fit.md` — Market analysis and competitive landscape
-- **Architecture:** `aiDocs/architecture.md` — Technical design (to be created)
+- **Architecture:** `aiDocs/architecture.md` — Technical design
 - **Roadmap:** `ai/roadmaps/` — Implementation task breakdown (to be created)
