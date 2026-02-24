@@ -167,4 +167,4 @@ Everything in this MVP serves that single validation. Everything else waits.
 - **Context:** `aiDocs/context.md` — Project overview and current focus
 - **Market Fit:** `recipe-app-market-fit.md` — Market analysis and competitive landscape
 - **Architecture:** `aiDocs/architecture.md` — Technical design
-- **Roadmap:** `ai/roadmaps/` — Implementation task breakdown (to be created)
+- **Roadmap:** `aiDocs/roadmap.md` — 6-week implementation checklist
