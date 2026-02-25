@@ -1,463 +1,173 @@
 # Architecture Document
-# Recipe Scanning & Shopping List App
+# Recipe Scanner App
 
-**Version:** 1.0  
-**Date:** February 6, 2026  
-**Status:** Draft
-
----
+**Version:** 3.0  
+**Status:** Implemented
 
 ## 1. System Overview
 
-### 1.1 High-Level Architecture
+The app runs as two cooperating components:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    iOS App (SwiftUI)                    │
-├─────────────────────────────────────────────────────────┤
-│  ┌───────────┐  ┌───────────┐  ┌─────────────────────┐ │
-│  │  Camera   │  │   Edit    │  │   Shopping List     │ │
-│  │   View    │→ │   Mode    │→ │       View          │ │
-│  └───────────┘  └───────────┘  └─────────────────────┘ │
-│         ↓              ↓                   ↓            │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │           State Management Layer                │   │
-│  │         (@Observable, @State)                   │   │
-│  └─────────────────────────────────────────────────┘   │
-│         ↓              ↓                   ↓            │
-│  ┌───────────┐  ┌───────────┐  ┌─────────────────────┐ │
-│  │    OCR    │  │  Recipe   │  │    Shopping List    │ │
-│  │  Service  │  │  Manager  │  │       Manager       │ │
-│  └───────────┘  └───────────┘  └─────────────────────┘ │
-│         ↓              ↓                   ↓            │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │         SwiftData Persistence Layer             │   │
-│  │    (Recipe, Ingredient, ShoppingList models)    │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
+```text
+┌───────────────────────────────────────────────────────────┐
+│              Web Demo (demo/mobileview/)                 │
+│                                                           │
+│  Scan Recipe Mode   Identify Meal Mode                   │
+│   ↓                   ↓                                   │
+│  Camera/Import       Camera/Import                       │
+│  (multi-photo)       (single photo)                      │
+│   ↓                   ↓                                   │
+│  Tesseract.js        ──────────────────────┐             │
+│  (on-device OCR)                           │             │
+│   ↓                                        │             │
+│  IngredientParser    ←────── Proxy ─────── ┤             │
+│   ↓                   (OCR.Space cloud)    │             │
+│  Editor View         ←────── Proxy ─────── ┘             │
+│   ↓                   (GPT-4o Vision)                    │
+│  Save Recipe                                              │
+│   ↓                                                       │
+│  Shopping List                                            │
+│   ↓                                                       │
+│  localStorage                                             │
+└───────────────────────────────────────────────────────────┘
 
-### 1.2 Core Components
+┌───────────────────────────────────────────────────────────┐
+│         Python Proxy (scripts/ocr_proxy_server.py)       │
+│                                                           │
+│  POST /ocr          → OCR.Space API                      │
+│  POST /analyze-meal → OpenAI GPT-4o Vision API           │
+│  GET  /health       → status check                       │
+└───────────────────────────────────────────────────────────┘
 
-| Component | Responsibility |
-|-----------|---------------|
-| **CameraView** | Capture recipe images via camera (physical cookbooks) or photo library import (digital screenshots from TikTok, websites, Instagram, etc.), preview, trigger OCR |
-| **OCRService** | Vision framework integration, image preprocessing, text extraction |
-| **IngredientParser** | Parse OCR text into structured ingredients (name, quantity, unit) |
-| **RecipeManager** | CRUD operations for recipes, multi-recipe merging |
-| **ShoppingListManager** | Generate and manage shopping lists from recipes |
-| **SwiftData Models** | Persistent storage for recipes, ingredients, lists |
-
----
-
-## 2. Data Models
-
-### 2.1 Core Models (SwiftData)
-
-```swift
-@Model
-class Recipe {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var createdAt: Date
-    var imageData: Data?  // Optional: store original photo
-    var ingredients: [Ingredient]
-    var isArchived: Bool = false
-    
-    init(name: String = "Untitled Recipe") {
-        self.id = UUID()
-        self.name = name
-        self.createdAt = Date()
-        self.ingredients = []
-    }
-}
-
-@Model
-class Ingredient {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var quantity: String?  // e.g., "2", "1/4", "2-3"
-    var unit: String?      // e.g., "cups", "tbsp", "lbs"
-    var rawText: String?   // Original OCR text for debugging
-    var recipe: Recipe?    // Parent recipe
-    
-    init(name: String, quantity: String? = nil, unit: String? = nil, rawText: String? = nil) {
-        self.id = UUID()
-        self.name = name
-        self.quantity = quantity
-        self.unit = unit
-        self.rawText = rawText
-    }
-}
-
-@Model
-class ShoppingList {
-    @Attribute(.unique) var id: UUID
-    var createdAt: Date
-    var items: [ShoppingListItem]
-    var sourceRecipeIDs: [UUID]  // Track which recipes contributed
-    
-    init() {
-        self.id = UUID()
-        self.createdAt = Date()
-        self.items = []
-        self.sourceRecipeIDs = []
-    }
-}
-
-@Model
-class ShoppingListItem {
-    @Attribute(.unique) var id: UUID
-    var ingredient: Ingredient
-    var isChecked: Bool = false
-    var mergedFrom: [UUID] = []  // Track which ingredients were merged (for multi-recipe)
-    
-    init(ingredient: Ingredient) {
-        self.id = UUID()
-        self.ingredient = ingredient
-    }
-}
+Shared Swift module (separate from web demo):
+- `RecipeCore`: models + parser + shopping list merge logic + fixture runner
 ```
 
-### 2.2 Supporting Types (Non-Persisted)
+## 2. Architectural Decisions
 
-```swift
-struct OCRResult {
-    let rawText: String
-    let confidence: Float  // 0.0 to 1.0
-    let boundingBox: CGRect?
-}
+1. Browser-first demo
+- Decision: Primary runnable app is vanilla HTML/CSS/JS
+- Why: Works on any OS without Xcode, ideal for demos and presentations
 
-struct ParsedIngredient {
-    let name: String
-    let quantity: String?
-    let unit: String?
-    let confidence: Float
-    let originalLine: String
-}
+2. Dual OCR strategy
+- Decision: Tesseract.js on-device + OCR.Space cloud via proxy
+- Why: On-device works offline; cloud gives better accuracy on noisy images
 
-enum OCRError: Error {
-    case imageProcessingFailed
-    case noTextDetected
-    case visionFrameworkError(Error)
-}
+3. AI meal identification
+- Decision: GPT-4o Vision via proxy server for dish recognition
+- Why: Generates full recipes with steps, temps, and measurements from a single food photo
 
-enum ParsingError: Error {
-    case invalidFormat
-    case ambiguousQuantity
-}
-```
+4. Multi-photo scanning
+- Decision: Up to 8 photos per recipe, combined OCR results
+- Why: Recipes often span multiple pages or screenshots
 
----
+5. Local-first persistence
+- Decision: localStorage with versioned key (`recipe-scanner-demo.v5`)
+- Why: No backend dependency, instant load, works offline
 
-## 3. OCR Pipeline
+6. Python proxy for API calls
+- Decision: Lightweight HTTP server bridges browser to external APIs
+- Why: Avoids CORS issues and keeps API keys server-side
 
-### 3.1 Flow
+## 3. Component Responsibilities
 
-```
-Image Capture → Preprocessing → Vision OCR → Text Extraction → Parsing → Structured Data
-```
+### Web Demo (`demo/mobileview/`)
 
-### 3.2 OCRService Implementation
+**app.js** — Core application logic:
+- State management (scan mode, recipes, shopping list, settings)
+- OCR orchestration (Tesseract.js on-device, OCR.Space via proxy)
+- Meal analysis flow (image capture → proxy → recipe generation)
+- Multi-photo grid management (up to 8 images)
+- Ingredient parsing with confidence scoring
+- Shopping list merge across recipes
+- localStorage persistence
 
-```swift
-@Observable
-class OCRService {
-    func extractText(from image: UIImage) async throws -> OCRResult {
-        // 1. Preprocess image (enhance contrast, correct orientation)
-        let processedImage = preprocessImage(image)
-        
-        // 2. Vision framework text recognition
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
-        
-        let handler = VNImageRequestHandler(cgImage: processedImage, options: [:])
-        try handler.perform([request])
-        
-        // 3. Extract text with confidence scores
-        guard let observations = request.results else {
-            throw OCRError.noTextDetected
-        }
-        
-        let recognizedText = observations
-            .compactMap { $0.topCandidates(1).first }
-            .map { ($0.string, $0.confidence) }
-        
-        return OCRResult(
-            rawText: recognizedText.map(\.0).joined(separator: "\n"),
-            confidence: recognizedText.map(\.1).reduce(0, +) / Float(recognizedText.count),
-            boundingBox: nil
-        )
-    }
-    
-    private func preprocessImage(_ image: UIImage) -> CGImage {
-        // TODO: Implement image enhancement
-        // - Increase contrast
-        // - Correct rotation/perspective
-        // - Remove noise
-        return image.cgImage!
-    }
-}
-```
+**index.html** — App shell:
+- iPhone-style phone frame (390×844px)
+- Tab navigation (Scan, Recipes, Shopping, Settings)
+- Mode toggle (Scan Recipe / Identify Meal)
+- Modal sheets for recipe detail and editing
 
-### 3.3 IngredientParser
+**styles.css** — iOS-inspired styling:
+- SF Pro typography, iOS color palette
+- Tab bar, navigation bars, card layouts
+- Step cards, temperature badges, photo grid
 
-```swift
-@Observable
-class IngredientParser {
-    private let commonUnits = ["cup", "cups", "tbsp", "tsp", "oz", "lb", "lbs", "g", "kg", "ml", "l"]
-    
-    func parse(_ ocrText: String) -> [ParsedIngredient] {
-        let lines = ocrText.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        
-        return lines.compactMap { line in
-            parseIngredientLine(line)
-        }
-    }
-    
-    private func parseIngredientLine(_ line: String) -> ParsedIngredient? {
-        // Regex patterns for common ingredient formats:
-        // "2 cups flour"
-        // "1/4 tsp salt"
-        // "3 large eggs"
-        // "garlic cloves, minced"
-        
-        // Pattern: (quantity) (unit) (ingredient name)
-        let pattern = #"^([\d\/.]+)\s*([a-zA-Z]+)?\s*(.+)$"#
-        
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []),
-              let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else {
-            // No quantity/unit detected, assume entire line is ingredient name
-            return ParsedIngredient(
-                name: line,
-                quantity: nil,
-                unit: nil,
-                confidence: 0.7,
-                originalLine: line
-            )
-        }
-        
-        let quantity = (line as NSString).substring(with: match.range(at: 1))
-        let unit = match.range(at: 2).location != NSNotFound 
-            ? (line as NSString).substring(with: match.range(at: 2))
-            : nil
-        let name = (line as NSString).substring(with: match.range(at: 3))
-        
-        return ParsedIngredient(
-            name: name.trimmingCharacters(in: .whitespaces),
-            quantity: quantity,
-            unit: unit,
-            confidence: calculateConfidence(quantity: quantity, unit: unit, name: name),
-            originalLine: line
-        )
-    }
-    
-    private func calculateConfidence(quantity: String?, unit: String?, name: String) -> Float {
-        var score: Float = 0.8  // Base confidence
-        
-        // Increase confidence if unit is recognized
-        if let unit = unit, commonUnits.contains(unit.lowercased()) {
-            score += 0.1
-        }
-        
-        // Decrease confidence if quantity looks weird
-        if let quantity = quantity, quantity.contains(where: { !($0.isNumber || $0 == "/" || $0 == ".") }) {
-            score -= 0.2
-        }
-        
-        return min(1.0, max(0.0, score))
-    }
-}
-```
+### Proxy Server (`scripts/ocr_proxy_server.py`)
+- POST `/ocr` — forwards images to OCR.Space API
+- POST `/analyze-meal` — sends food photos to GPT-4o Vision, returns structured recipe JSON
+- GET `/health` — status check
+- Retry logic with exponential backoff on 429 rate limits
+- Reads API keys from environment variables only (no hardcoded secrets)
 
-### 3.4 LLM Fallback (GPT-4 Vision)
+### RecipeCore (Swift, `Sources/RecipeCore/`)
+- `IngredientParser` — line cleanup, quantity/unit/name parsing, fraction normalization
+- `ShoppingListBuilder` — merge duplicates across recipes
+- `DomainModels` — shared data structures
+- `ParserFixture` — fixture-driven test runner
 
-When the Vision framework OCR confidence falls below 70%, the image can optionally be sent to the GPT-4 Vision API for extraction. This provides a second-pass extraction path that is especially useful for:
+### iOS App (`ios/RecipeScannerApp/`)
+- Original Swift/SwiftUI implementation (requires macOS + Xcode)
+- Uses Apple Vision OCR (separate from web demo's OCR pipeline)
 
-- **Digital screenshots** (TikTok, websites, Instagram) with complex layouts, overlays, or non-standard formatting that the rule-based parser struggles with
-- **Stylized cookbook pages** with decorative fonts or unusual ingredient list structures
-- **Low-confidence Vision results** where the on-device OCR is uncertain
+## 4. Data Flow
 
-**Configuration:**
-- LLM fallback is an **optional, user-configurable** feature (off by default)
-- Users can enable it in Settings; the app should clearly indicate when an image will be sent off-device
-- When enabled, fallback triggers automatically when Vision confidence < 70%
+### Scan Recipe Mode
+1. User captures/imports up to 8 photos
+2. Each photo → Tesseract.js (on-device) or OCR.Space (cloud via proxy)
+3. Combined OCR text → ingredient parser
+4. Parsed ingredients shown in editor with confidence scores
+5. User edits → save recipe → generate shopping list → localStorage
 
-**Privacy Note:** Sending images to the GPT-4 Vision API means recipe images leave the device and are processed by OpenAI's servers. The app must clearly disclose this to the user before enabling the feature, and should never send images off-device without explicit user consent.
+### Identify Meal Mode
+1. User captures/imports one photo of a finished dish
+2. Image sent to proxy `/analyze-meal` endpoint
+3. GPT-4o Vision returns: dish name, ingredients with quantities, cooking steps with temps/times
+4. Result shown in editor for review
+5. User edits → save recipe → generate shopping list → localStorage
 
----
+## 5. Environment Variables
 
-## 4. UI Architecture
+| Variable | Purpose | Required For |
+|----------|---------|-------------|
+| `OCR_SPACE_API_KEY` | OCR.Space cloud API | Cloud OCR fallback |
+| `OPENAI_API_KEY` | OpenAI API access | Meal identification |
+| `OPENAI_PROJECT_ID` | OpenAI project scoping | Meal identification (optional) |
 
-### 4.1 View Hierarchy
+All keys read from environment only — no hardcoded values in source.
 
-```
-ContentView (Root)
-├── CameraView
-│   ├── Camera preview layer
-│   ├── Capture button
-│   └── Gallery picker
-├── EditModeView
-│   ├── Ingredient list (editable)
-│   ├── Add/Remove buttons
-│   └── Save to shopping list
-└── ShoppingListView
-    ├── Checklist UI
-    ├── Check/uncheck items
-    └── Clear/reset buttons
-```
+## 6. Error Handling Strategy
 
-### 4.2 State Management
+1. OCR returns no text → retake photo guidance
+2. Proxy unreachable → fall back to Tesseract.js (Scan mode); show error (Meal mode)
+3. GPT-4o rate limited (429) → automatic retry with exponential backoff (3 attempts)
+4. Parser outputs empty list → manual correction prompt
+5. localStorage full/unavailable → graceful degradation warning
 
-```swift
-@Observable
-class AppState {
-    var currentRecipe: Recipe?
-    var scannedRecipes: [Recipe] = []
-    var shoppingList: ShoppingList?
-    var isScanning: Bool = false
-    var showEditMode: Bool = false
-}
-```
+## 7. Testability Strategy
 
----
+- Swift parser tested in `RecipeCoreTests`
+- Fixture-driven regression via CLI target
+- Web demo testable in any browser with DevTools
+- Proxy server has `/health` endpoint for status checks
 
-## 5. Storage Layer (SwiftData)
+## 8. Known Limitations
 
-### 5.1 Schema Design
+1. Meal identification requires proxy server and OpenAI API key
+2. Multi-recipe merge uses normalized exact matching, not fuzzy semantic matching
+3. Web demo persistence is browser-local, not synced across devices
+4. iOS app is separate codebase with its own OCR pipeline (Apple Vision)
 
-- **Recipe** → one-to-many → **Ingredient**
-- **ShoppingList** → one-to-many → **ShoppingListItem**
-- **ShoppingListItem** → references → **Ingredient**
+## 9. Problem Target and Leverage Fit
 
-### 5.2 Queries
+This architecture targets the translation bottleneck: `recipe source → structured grocery list`.
 
-```swift
-// Fetch all recipes
-@Query(sort: \Recipe.createdAt, order: .reverse) var recipes: [Recipe]
+Most leveraged components:
 
-// Fetch active shopping list
-@Query(filter: #Predicate<ShoppingList> { !$0.isArchived }) var activeList: [ShoppingList]
-```
+1. OCR pipeline (first-pass extraction quality)
+2. Ingredient parser (structure quality)
+3. Editor view (human correction speed)
+4. Shopping list + persistence (real-world execution reliability)
+5. Meal identification (zero-text recipe generation from food photos)
 
----
-
-## 6. Error Handling
-
-### 6.1 OCR Failures
-
-- **Low confidence (<70%)**: Show warning banner; if LLM fallback is enabled, offer to send to GPT-4 Vision; allow user to retry
-- **No text detected**: Prompt user to adjust lighting/angle
-- **Vision framework error**: Fallback to manual entry option
-
-### 6.2 Parsing Errors
-
-- **Ambiguous quantity**: Show user the uncertain field, ask for clarification
-- **Unrecognized format**: Store raw text, let user edit manually
-
----
-
-## 7. Performance Considerations
-
-### 7.1 Optimization Strategies
-
-- **On-device OCR**: No network latency, works offline
-- **Lazy loading**: Load recipe images only when needed
-- **Debouncing**: Prevent rapid repeated OCR calls during camera adjustment
-- **Caching**: Cache parsed ingredients to avoid re-parsing on app restart
-
-### 7.2 Memory Management
-
-- Store images as compressed Data (JPEG 80% quality)
-- Limit recipe history to 50 most recent (configurable)
-- Clear checked shopping list items after 24 hours (optional)
-
----
-
-## 8. Testing Strategy
-
-### 8.1 Unit Tests
-
-- IngredientParser regex patterns
-- Merge logic (duplicate detection)
-- Quantity combination logic
-
-### 8.2 Integration Tests
-
-- OCR → Parse → Save pipeline
-- Multi-recipe merge flow
-- Shopping list state persistence
-
-### 8.3 Manual Testing
-
-- Test with real cookbooks (varied fonts, layouts)
-- Edge cases: handwritten recipes, angled photos, poor lighting
-- Performance: OCR speed on older devices (iPhone 12+)
-
----
-
-## 9. Future Architecture Considerations (Post-MVP)
-
-### 9.1 Phase 2: Multi-Recipe Merge Logic
-
-Exact-match duplicate detection and basic quantity merging for combining ingredients across multiple scanned recipes.
-
-```swift
-@Observable
-class RecipeManager {
-    func mergeRecipes(_ recipes: [Recipe]) -> [Ingredient] {
-        var mergedIngredients: [String: Ingredient] = [:]
-        
-        for recipe in recipes {
-            for ingredient in recipe.ingredients {
-                let key = ingredient.name.lowercased().trimmingCharacters(in: .whitespaces)
-                
-                if let existing = mergedIngredients[key] {
-                    let combinedQuantity = combineQuantities(existing.quantity, ingredient.quantity)
-                    existing.quantity = combinedQuantity
-                } else {
-                    mergedIngredients[key] = ingredient
-                }
-            }
-        }
-        
-        return Array(mergedIngredients.values).sorted { $0.name < $1.name }
-    }
-    
-    private func combineQuantities(_ q1: String?, _ q2: String?) -> String? {
-        guard let q1 = q1, let q2 = q2 else {
-            return q1 ?? q2
-        }
-        return "\(q1) + \(q2)"  // e.g., "2 cups + 1 cup"
-    }
-}
-```
-
-**Phase 2 Enhancements:**
-- Fuzzy string matching ("garlic" vs "garlic clove" vs "minced garlic")
-- Quantity arithmetic (2 cups + 1 cup = 3 cups)
-- Unit normalization (1 tbsp + 3 tsp = 1 tbsp)
-
-### 9.2 Phase 2: Advanced Multi-Recipe
-- **Fuzzy matching service** (e.g., Levenshtein distance for ingredient names)
-- **Quantity arithmetic engine** (parse "2 1/2 cups" and calculate sums)
-
-### 9.3 Phase 3: Cloud Sync
-- **Backend**: Firebase or Supabase for cross-device sync
-- **Conflict resolution**: Last-write-wins for shopping list state
-
-### 9.4 Phase 4: Advanced Features
-- **ML model**: Custom CoreML model for recipe-specific OCR (trained on cookbook layouts)
-- **Grocery store integration**: APIs for price tracking, store inventory
-
----
-
-## Related Documents
-
-- **PRD:** `aiDocs/prd.md`
-- **MVP Definition:** `aiDocs/mvp.md`
-- **Context:** `aiDocs/context.md`
-- **Coding Style:** `aiDocs/coding-style.md` (to be created)
+Full system-level mapping: `aiDocs/system-architecture-leverage.md`

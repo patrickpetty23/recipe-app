@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recipe Scanner Desktop Demo</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>Recipe Scanner</h1>
+        <p>Desktop Demo (iOS Flow Mirror)</p>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-btn active" data-view-target="scan-view">Scan</button>
+        <button class="nav-btn" data-view-target="recipes-view">Recipes</button>
+        <button class="nav-btn" data-view-target="shopping-view">Shopping</button>
+        <button class="nav-btn" data-view-target="settings-view">Settings</button>
+      </nav>
+
+      <section class="quick-stats">
+        <h2>Live Snapshot</h2>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="label">Saved Recipes</span>
+            <span class="value" id="stat-recipes">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="label">Shopping Items</span>
+            <span class="value" id="stat-shopping">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="label">Checked</span>
+            <span class="value" id="stat-checked">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="label">Last OCR</span>
+            <span class="value" id="stat-confidence">-</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h2 id="view-title">Scan</h2>
+          <p id="view-subtitle">Capture/import a recipe image and extract ingredients.</p>
+        </div>
+        <div class="pill" id="session-pill">Ready</div>
+      </header>
+
+      <section class="view active" id="scan-view">
+        <div class="grid two">
+          <article class="card">
+            <h3>Image Intake</h3>
+            <label class="input-label" for="image-input">Import recipe image</label>
+            <input id="image-input" type="file" accept="image/*">
+            <div class="inline-actions">
+              <button class="ghost" id="clear-image">Clear Image</button>
+              <span id="selected-image-name" class="hint">No file selected</span>
+            </div>
+
+            <label class="input-label" for="ocr-input">Optional OCR text override</label>
+            <textarea id="ocr-input" rows="6" placeholder="Paste OCR text here to bypass image OCR for fast demos."></textarea>
+
+            <div class="inline-actions">
+              <button id="extract-btn">Extract Ingredients</button>
+              <span id="extract-progress" class="hint"></span>
+            </div>
+            <p id="extract-message" class="message"></p>
+          </article>
+
+          <article class="card">
+            <h3>Preview</h3>
+            <div class="image-preview" id="image-preview">
+              <span>No image loaded</span>
+            </div>
+            <div class="meta-grid">
+              <div>
+                <span class="label">OCR Confidence</span>
+                <span id="ocr-confidence-display">-</span>
+              </div>
+              <div>
+                <span class="label">Source</span>
+                <span id="ocr-source-display">-</span>
+              </div>
+            </div>
+
+            <div class="scan-metrics">
+              <h4>Extraction Metrics</h4>
+              <div class="metrics-grid">
+                <div class="metric-cell">
+                  <span class="label">Total lines</span>
+                  <span id="metric-total-lines">-</span>
+                </div>
+                <div class="metric-cell">
+                  <span class="label">Parsed lines</span>
+                  <span id="metric-parsed-lines">-</span>
+                </div>
+                <div class="metric-cell">
+                  <span class="label">Dropped lines</span>
+                  <span id="metric-dropped-lines">-</span>
+                </div>
+                <div class="metric-cell">
+                  <span class="label">Qty coverage</span>
+                  <span id="metric-qty-coverage">-</span>
+                </div>
+                <div class="metric-cell">
+                  <span class="label">Unit coverage</span>
+                  <span id="metric-unit-coverage">-</span>
+                </div>
+                <div class="metric-cell">
+                  <span class="label">Quality score</span>
+                  <span id="metric-quality-score">-</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <article class="card editor-card hidden" id="editor-card">
+          <div class="card-heading">
+            <h3>Review Ingredients</h3>
+            <div class="inline-actions">
+              <button class="ghost" id="discard-draft">Discard</button>
+              <button id="save-draft">Save Recipe + Generate List</button>
+            </div>
+          </div>
+
+          <label class="input-label" for="recipe-name-input">Recipe name</label>
+          <input id="recipe-name-input" type="text" placeholder="Untitled Recipe">
+
+          <div class="ingredients-table">
+            <div class="thead">
+              <span>Qty</span>
+              <span>Unit</span>
+              <span>Ingredient</span>
+              <span>Confidence</span>
+              <span></span>
+            </div>
+            <div id="ingredient-rows"></div>
+          </div>
+
+          <div class="inline-actions">
+            <button class="ghost" id="add-ingredient">+ Add Ingredient</button>
+            <span class="hint" id="draft-hint"></span>
+          </div>
+
+          <details id="dropped-lines-box">
+            <summary>Dropped OCR lines</summary>
+            <ul id="dropped-lines-list"></ul>
+          </details>
+        </article>
+      </section>
+
+      <section class="view" id="recipes-view">
+        <article class="card">
+          <div class="card-heading">
+            <h3>Recipe Library</h3>
+            <button id="merge-all" class="ghost">Merge All to Shopping List</button>
+          </div>
+          <div id="recipes-list" class="stack"></div>
+        </article>
+      </section>
+
+      <section class="view" id="shopping-view">
+        <article class="card">
+          <div class="card-heading">
+            <h3>Shopping List</h3>
+            <button class="ghost danger" id="clear-shopping">Clear List</button>
+          </div>
+          <div id="shopping-list" class="stack"></div>
+        </article>
+      </section>
+
+      <section class="view" id="settings-view">
+        <div class="grid two">
+          <article class="card">
+            <h3>Extraction Settings</h3>
+            <label class="toggle">
+              <input id="cloud-fallback-toggle" type="checkbox">
+              <span>Use AI cloud extraction (placeholder)</span>
+            </label>
+
+            <label class="input-label" for="threshold-input">Low confidence threshold</label>
+            <input id="threshold-input" type="range" min="0.4" max="0.95" step="0.05">
+            <div class="inline-actions">
+              <span class="hint">Threshold value:</span>
+              <span id="threshold-value">0.70</span>
+            </div>
+
+            <p class="hint">Cloud fallback is not implemented in desktop demo mode. iOS app keeps this off by default too.</p>
+          </article>
+
+          <article class="card">
+            <h3>Debug and Storage</h3>
+            <div class="inline-actions">
+              <button class="ghost" id="copy-logs">Copy Logs</button>
+              <button class="ghost danger" id="reset-demo">Reset All Demo Data</button>
+            </div>
+            <pre id="logs-preview"></pre>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

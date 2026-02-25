@@ -1,0 +1,39 @@
+{
+  "cases": [
+    {
+      "name": "fraction line",
+      "inputLines": ["1/4 cup sugar"],
+      "expectedIngredients": [
+        { "name": "sugar", "quantity": "1/4", "unit": "cup" }
+      ]
+    },
+    {
+      "name": "unicode fraction",
+      "inputLines": ["½ tsp kosher salt"],
+      "expectedIngredients": [
+        { "name": "kosher salt", "quantity": "1/2", "unit": "tsp" }
+      ]
+    },
+    {
+      "name": "whole number no unit",
+      "inputLines": ["3 eggs"],
+      "expectedIngredients": [
+        { "name": "eggs", "quantity": "3", "unit": null }
+      ]
+    },
+    {
+      "name": "noise line dropped",
+      "inputLines": ["Directions", "2 cups flour"],
+      "expectedIngredients": [
+        { "name": "flour", "quantity": "2", "unit": "cups" }
+      ]
+    },
+    {
+      "name": "complex name",
+      "inputLines": ["1 tbsp extra virgin olive oil"],
+      "expectedIngredients": [
+        { "name": "extra virgin olive oil", "quantity": "1", "unit": "tbsp" }
+      ]
+    }
+  ]
+}

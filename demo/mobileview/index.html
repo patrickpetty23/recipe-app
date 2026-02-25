@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Recipe Scanner — Mobile Demo</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+
+  <!-- ─── Phone Frame ─── -->
+  <main class="phone" id="phone">
+
+    <!-- ─── Status Bar ─── -->
+    <div class="status-bar">
+      <span class="status-time" id="status-time">9:41</span>
+      <span class="status-icons">
+        <svg width="16" height="12" viewBox="0 0 16 12"><path d="M1 8h2v4H1zM5 5h2v7H5zM9 3h2v9H9zM13 0h2v12h-2z" fill="currentColor"/></svg>
+        <svg width="16" height="12" viewBox="0 0 24 16"><path d="M1 4a15 15 0 0122 0l-2 2A12 12 0 003 6L1 4zm4 4a10 10 0 0114 0l-2 2a7 7 0 00-10 0L5 8zm4 4a5 5 0 016 0l-3 3-3-3z" fill="currentColor"/></svg>
+        <svg width="22" height="12" viewBox="0 0 28 14"><rect x="0" y="1" width="23" height="12" rx="3" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="24" y="4.5" width="2.5" height="5" rx="1" fill="currentColor"/><rect x="2" y="3" width="17" height="8" rx="1.5" fill="currentColor"/></svg>
+      </span>
+    </div>
+
+    <!-- ─── Top Navigation ─── -->
+    <header class="top-nav">
+      <h1 id="nav-title">Scanner</h1>
+      <button id="nav-action" class="nav-action hidden" disabled>Action</button>
+    </header>
+
+    <!-- ─── Views Container ─── -->
+    <div class="views-container">
+
+      <!-- === SCAN VIEW === -->
+      <section class="view active" id="scan-view">
+        <div class="scroll-area">
+          <h2>Scan Recipe</h2>
+          <p class="subtitle">Capture a cookbook page, import screenshots, or snap a finished meal to get ingredients and cooking steps.</p>
+
+          <!-- Mode Toggle -->
+          <div class="mode-toggle" id="mode-toggle">
+            <button class="mode-btn active" data-mode="recipe" id="mode-recipe-btn">📖 Scan Recipe</button>
+            <button class="mode-btn" data-mode="meal" id="mode-meal-btn">🍽️ Identify Meal</button>
+          </div>
+
+          <!-- ═══ RECIPE SCANNING MODE ═══ -->
+          <div id="recipe-mode" class="scan-mode-panel">
+            <div class="btn-row">
+              <button class="btn btn-primary" id="open-camera-btn">
+                <span class="btn-icon">📷</span> Camera
+              </button>
+              <button class="btn btn-secondary" id="import-photo-btn">
+                <span class="btn-icon">🖼️</span> Import
+              </button>
+            </div>
+
+            <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
+            <input id="photo-input" type="file" accept="image/*" multiple hidden>
+
+            <!-- Multi-photo grid -->
+            <div class="photo-grid hidden" id="photo-grid"></div>
+
+            <div class="image-preview" id="image-preview">
+              <div class="placeholder" id="image-placeholder">
+                <div class="placeholder-icon">📋</div>
+                <p>No image selected</p>
+                <button class="btn btn-ghost" id="try-sample-btn">Try with Sample Recipe</button>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-full" id="extract-btn" disabled>
+              Extract Ingredients
+            </button>
+            <p class="progress-text" id="extract-progress"></p>
+
+            <div class="alert alert-warning hidden" id="warning-msg"></div>
+            <div class="alert alert-error hidden" id="error-msg"></div>
+
+            <div class="confidence-card hidden" id="confidence-box">
+              <div class="confidence-header">
+                <span>OCR Confidence</span>
+                <strong id="ocr-confidence-value">0%</strong>
+              </div>
+              <div class="confidence-track">
+                <div class="confidence-fill" id="ocr-confidence-bar"></div>
+              </div>
+              <p class="meta-text" id="ocr-source-label">source: —</p>
+            </div>
+          </div>
+
+          <!-- ═══ MEAL IDENTIFICATION MODE ═══ -->
+          <div id="meal-mode" class="scan-mode-panel hidden">
+            <p class="mode-description">Take a photo of a finished meal. AI will identify the dish, list all ingredients with measurements, and generate step-by-step cooking instructions.</p>
+
+            <div class="btn-row">
+              <button class="btn btn-primary" id="meal-camera-btn">
+                <span class="btn-icon">📷</span> Camera
+              </button>
+              <button class="btn btn-secondary" id="meal-import-btn">
+                <span class="btn-icon">🖼️</span> Import
+              </button>
+            </div>
+
+            <input id="meal-camera-input" type="file" accept="image/*" capture="environment" hidden>
+            <input id="meal-photo-input" type="file" accept="image/*" hidden>
+
+            <div class="image-preview" id="meal-image-preview">
+              <div class="placeholder">
+                <div class="placeholder-icon">🍽️</div>
+                <p>No meal photo selected</p>
+                <button class="btn btn-ghost" id="try-sample-meal-btn">Try with Sample Meal</button>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-full" id="analyze-meal-btn" disabled>
+              🤖 Identify Meal &amp; Generate Recipe
+            </button>
+            <p class="progress-text" id="meal-progress"></p>
+            <div class="alert alert-error hidden" id="meal-error-msg"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- === RECIPES VIEW === -->
+      <section class="view" id="recipes-view">
+        <div class="scroll-area">
+          <div id="recipes-empty" class="empty-state">
+            <div class="empty-icon">📖</div>
+            <h3>No Saved Recipes</h3>
+            <p>Scanned recipes appear here for quick reuse.</p>
+          </div>
+          <div id="recipes-list" class="card-stack"></div>
+        </div>
+      </section>
+
+      <!-- === SHOPPING VIEW === -->
+      <section class="view" id="shopping-view">
+        <div class="scroll-area">
+          <div id="shopping-empty" class="empty-state">
+            <div class="empty-icon">🛒</div>
+            <h3>No Shopping List</h3>
+            <p>Scan a recipe and save it to generate your shopping checklist.</p>
+          </div>
+          <div id="shopping-summary" class="shopping-summary hidden"></div>
+          <div id="shopping-list" class="card-stack"></div>
+        </div>
+      </section>
+
+      <!-- === SETTINGS VIEW === -->
+      <section class="view" id="settings-view">
+        <div class="scroll-area">
+          <div class="settings-card">
+            <h3>Extraction</h3>
+            <label class="toggle-row">
+              <span>Use AI Cloud Extraction</span>
+              <div class="toggle-switch">
+                <input type="checkbox" id="cloud-toggle">
+                <span class="toggle-slider"></span>
+              </div>
+            </label>
+            <label class="field-label" for="threshold-slider">Low Confidence Threshold</label>
+            <input type="range" id="threshold-slider" min="0.4" max="0.95" step="0.05" class="range-input">
+            <p class="meta-text"><span id="threshold-value">70</span>%</p>
+          </div>
+
+          <div class="settings-card">
+            <h3>Privacy</h3>
+            <p class="meta-text">On-device OCR is used by default via Tesseract.js in-browser. Enable cloud extraction only if you accept sending images to OCR.Space API through the local proxy server.</p>
+          </div>
+
+          <div class="settings-card">
+            <h3>Data</h3>
+            <button class="btn btn-danger btn-full" id="reset-all-btn">Reset All Data</button>
+            <p class="meta-text" style="margin-top:8px">Clears all saved recipes, shopping lists, and settings.</p>
+          </div>
+
+          <div class="settings-card">
+            <h3>About</h3>
+            <p class="meta-text">Recipe Scanner v2.0 — Mobile Demo<br>Scan → Parse → Edit → Shop</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ─── Tab Bar ─── -->
+    <nav class="tab-bar">
+      <button class="tab active" data-view="scan-view">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="3"/><path d="M3 9h2M19 9h2M9 3v2M9 19v2"/></svg>
+        <span>Scan</span>
+      </button>
+      <button class="tab" data-view="recipes-view">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        <span>Recipes</span>
+      </button>
+      <button class="tab" data-view="shopping-view">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        <span>Shop</span>
+      </button>
+      <button class="tab" data-view="settings-view">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </main>
+
+  <!-- ─── Editor Sheet (overlay) ─── -->
+  <div class="sheet-overlay hidden" id="editor-sheet">
+    <div class="sheet">
+      <header class="sheet-header">
+        <button class="btn-link" id="editor-close">Cancel</button>
+        <h3>Review Ingredients</h3>
+        <button class="btn-link btn-link-primary" id="editor-save">Save</button>
+      </header>
+      <div class="sheet-body">
+        <label class="field-label" for="recipe-name-input">Recipe Name</label>
+        <input id="recipe-name-input" type="text" class="text-input" placeholder="Untitled Recipe">
+
+        <div class="section-row">
+          <h4>Ingredients</h4>
+          <span class="badge" id="ingredient-count-badge">0</span>
+        </div>
+        <div id="ingredient-list" class="ingredient-stack"></div>
+        <button class="btn btn-secondary btn-full" id="add-ingredient-btn">+ Add Ingredient</button>
+
+        <details id="dropped-lines-box" class="dropped-details hidden">
+          <summary>Dropped OCR Lines</summary>
+          <ul id="dropped-lines-list"></ul>
+        </details>
+
+        <div id="steps-section" class="hidden">
+          <div class="section-row">
+            <h4>Steps</h4>
+            <span class="badge" id="steps-count-badge">0</span>
+          </div>
+          <div id="steps-list" class="steps-stack"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Recipe Detail Sheet ─── -->
+  <div class="sheet-overlay hidden" id="recipe-detail-sheet">
+    <div class="sheet">
+      <header class="sheet-header">
+        <button class="btn-link" id="detail-close">Back</button>
+        <h3 id="detail-title">Recipe</h3>
+        <button class="btn-link btn-link-primary" id="detail-generate">Shop</button>
+      </header>
+      <div class="sheet-body">
+        <div class="image-preview compact hidden" id="detail-image-preview"></div>
+        <h4>Ingredients</h4>
+        <div id="detail-ingredients" class="card-stack"></div>
+        <div id="detail-meta" class="recipe-meta hidden"></div>
+        <div id="detail-steps-section" class="hidden">
+          <h4>Steps</h4>
+          <div id="detail-steps" class="steps-stack"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Confirm Dialog ─── -->
+  <div class="dialog-overlay hidden" id="confirm-dialog">
+    <div class="dialog">
+      <h3 id="confirm-title">Confirm</h3>
+      <p id="confirm-message">Are you sure?</p>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+        <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

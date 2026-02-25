@@ -1,4 +1,5 @@
 # AI working space (local process artifacts)
+ai/
 ai/guides/
 ai/notes/
 ai/roadmaps/
@@ -18,6 +19,9 @@ __pycache__/
 # Environment
 .env
 .env.local
+
+# Office temp/lock files
+~$*
 
 # macOS
 .DS_Store

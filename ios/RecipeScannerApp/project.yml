@@ -1,0 +1,33 @@
+name: RecipeScannerApp
+options:
+  createIntermediateGroups: true
+targets:
+  RecipeScannerApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - Sources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: RecipeScanner
+        UILaunchScreen: {}
+        NSCameraUsageDescription: Capture cookbook pages to extract ingredients.
+        NSPhotoLibraryUsageDescription: Import recipe screenshots and photos for ingredient extraction.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.timur.recipescanner
+        SWIFT_VERSION: 5.10
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.0
+        INFOPLIST_FILE: Info.plist
+        TARGETED_DEVICE_FAMILY: 1
+        IPHONEOS_DEPLOYMENT_TARGET: 17.0
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: RecipeCore
+
+packages:
+  RecipeCore:
+    path: ../..

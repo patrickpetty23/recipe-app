@@ -1,170 +1,85 @@
 # MVP Definition
-# Recipe Scanning & Shopping List App
+# Recipe Scanner App
 
-**Version:** 1.0  
-**Date:** February 5, 2026  
-**Status:** In Review
+**Version:** 3.0  
+**Status:** Build Complete
 
----
+## MVP Objective
 
-## MVP Philosophy
+Validate that scanning/importing a recipe and generating an editable shopping list is meaningfully faster than manual list creation. Additionally validate that AI-powered meal identification can generate usable recipes from food photos.
 
-**The goal is to validate: "Does scanning a recipe and creating a shopping list save users time?"**
+## In MVP (Implemented)
 
-Everything in this MVP serves that single validation. Everything else waits.
+### Scan Recipe Mode
+1. Camera capture flow
+2. Photo library import flow
+3. Multi-photo support (up to 8 images per recipe)
+4. Dual OCR: Tesseract.js on-device + OCR.Space cloud via proxy
+5. Rule-based ingredient parser with confidence scoring
+6. Ingredient edit mode (add/edit/delete)
+7. Save recipe locally (localStorage)
+8. Generate persistent shopping checklist
+9. Recipe library with history and regenerate list
+10. Basic multi-recipe merge from saved recipes
 
-> "If users don't find value in the core loop, fancy features won't fix it."
+### Identify Meal Mode
+11. Photo capture/import of finished dishes
+12. GPT-4o Vision meal identification via proxy server
+13. AI-generated recipe with ingredients, steps, temperatures, and timing
+14. Editable AI output before saving
+15. Sample meal for offline testing
 
----
+### Infrastructure
+16. Python proxy server for API calls (OCR.Space, OpenAI)
+17. Settings panel (OCR mode toggle, confidence threshold, data reset)
 
-## MVP Scope
+## Not in MVP (Deferred)
 
-### ✅ IN MVP (Phase 1)
+1. Advanced fuzzy deduplication
+2. Unit conversion system
+3. Apple Notes export
+4. URL recipe extraction
+5. Android-native app
 
-#### 1. Single Recipe Scanning
-- Point camera at physical cookbook page and tap to capture
-- Import photos from library: screenshots from TikTok, websites, Instagram, or any digital recipe source
-- Basic auto-capture when frame is stable (optional)
+## MVP User Flows
 
-#### 2. OCR & Ingredient Extraction
-- Apple Vision framework (on-device)
-- Extract ingredient name, quantity, unit
-- Support standard ingredient list formatting
-- **Target:** 90% field accuracy (name, quantity, unit extracted correctly)
+### Flow 1: Scan Recipe
+1. Open app → Scan tab
+2. Toggle to "Scan Recipe" mode
+3. Tap camera/import or use sample recipe
+4. (Optional) Add more photos to grid (up to 8)
+5. Tap "Extract Ingredients"
+6. Review and fix ingredient rows
+7. Tap "Save" → shopping checklist generated
 
-#### 3. Edit Mode
-- Simple list view of extracted ingredients
-- Tap to edit any field (name, quantity, unit)
-- Delete unwanted lines
-- Add missing ingredients manually
-- **Goal:** Fix errors in <10 seconds
+### Flow 2: Identify Meal
+1. Open app → Scan tab
+2. Toggle to "Identify Meal" mode
+3. Capture or import photo of a dish
+4. Tap "Analyze Meal" (or "Try Sample Meal" for demo)
+5. Review generated recipe, ingredients, and steps
+6. Tap "Save" → shopping checklist generated
 
-#### 4. Shopping List View
-- Clean checklist UI
-- Check/uncheck items
-- Persistent state (survives app close)
-- Clear all / reset for new trip
+## MVP Acceptance Criteria
 
-#### 5. Recipe Storage (Minimal)
-- Save scanned recipe to local database
-- View list of saved recipes
-- Re-open previous recipes
+- End-to-end Scan Recipe flow completes without errors
+- End-to-end Identify Meal flow completes when proxy is running
+- List state persists after page reload
+- OCR failures show clear user message
+- User can edit extraction output before saving
+- On-device OCR works without network access
+- Meal identification fails gracefully when proxy is unavailable
 
----
+## Build Evidence
 
-## 🚫 EXPLICITLY NOT IN MVP
+### Web Demo (primary)
+- App source: `demo/mobileview/app.js`, `index.html`, `styles.css`
+- Proxy server: `scripts/ocr_proxy_server.py`
 
-| Feature | Why It's Out | When It Comes In |
-|---------|--------------|------------------|
-| Multi-Recipe Preview | Scope creep for initial validation; Phase 2 only | Phase 2 |
-| Full multi-recipe workflow | Validate core single-recipe loop first | Phase 2 |
-| Advanced duplicate detection | Requires multi-recipe support | Phase 2 |
-| Unit conversions | Complex, requires database, not core value | Phase 3+ |
-| Apple Notes export | Distribution, not core value | Phase 3 |
-| Online recipe support (URL auto-extraction) | Expansion, not validation | Phase 3 |
-| Recipe categories/tags | Organization, not core loop | Phase 2+ |
-| Cloud sync | Local-first for MVP | Phase 2+ |
-| Social sharing | Nice-to-have | Future |
-| Shopping history | Analytics, not MVP | Future |
-| Price tracking | Complex integration | Phase 4+ |
+### Swift Core
+- Parser + tests: `Sources/RecipeCore`, `Tests/RecipeCoreTests`
+- Fixture runner: `Sources/RecipeCLITest/main.swift`, `fixtures/parser-fixtures.json`
+- Test script: `scripts/run-cli-tests.ps1`, `scripts/run-cli-tests.sh`
 
----
-
-## MVP User Flow
-
-```
-1. Open App
-   ↓
-2. Camera View (point at recipe)
-   ↓
-3. Capture Photo → OCR Processing
-   ↓
-4. Edit Mode (review/fix ingredients)
-   ↓
-5. Save to Shopping List
-   ↓
-6. Shopping List View (check items while shopping)
-```
-
-**Total time goal:** <30 seconds from open to shopping list
-
----
-
-## MVP Success Criteria
-
-### Must Pass (Go/No-Go)
-- [ ] User can scan a recipe and generate a list in <30 seconds
-- [ ] OCR extracts ≥90% of fields correctly (name, quantity, unit on clean pages)
-- [ ] User can fix extraction errors in <10 seconds
-- [ ] User completes at least 1 actual shopping trip using the app
-- [ ] App works offline (no internet required for core features)
-
-### Validation Questions (Ask Users After 1 Week)
-- Would you use this every time you cook?
-- How does this compare to your current workflow?
-- What was frustrating?
-- What's missing that you actually need?
-- Did you trust the extracted list without double-checking everything?
-
----
-
-## Technical MVP Boundaries
-
-### Keep It Simple
-- **Single view architecture** (no complex navigation)
-- **Local storage only** (SwiftData)
-- **On-device OCR** (Apple Vision, no cloud calls for MVP)
-- **Minimal backend** (none for MVP)
-- **iPhone-only** (iPad later if validated)
-
-### Decision Log
-
-| Decision | Rationale |
-|----------|-----------|
-| Single recipe only (no multi-recipe) | Validate core loop before building complexity |
-| No Apple Notes export | In-app list is faster to build, tests core value first |
-| Local storage only | Faster to build, respects privacy, works offline |
-| Vision framework only | On-device, free, fast; add GPT-4 Vision fallback if needed |
-| No unit conversion | Prove users want the app before building conversion database |
-
----
-
-## MVP Timeline Estimate
-
-**Target:** 4-6 weeks for one developer
-
-| Week | Focus |
-|------|-------|
-| 1 | Project setup, camera integration, basic UI |
-| 2 | OCR integration, ingredient extraction |
-| 3 | Edit mode, data models, local storage |
-| 4 | Shopping list view, polish, testing |
-| 5 | Bug fixes, performance, edge cases |
-| 6 | User testing, feedback, iteration |
-
----
-
-## What Happens After MVP
-
-### If MVP Validates (Users Love It)
-→ **Phase 2: Full Multi-Recipe**
-- Full multi-recipe workflow (not just preview)
-- Advanced fuzzy duplicate detection
-- Recipe library improvements (search, tags, categories)
-- Better merge UI with conflict resolution
-
-### If MVP Fails
-→ **Pivot or Kill**
-- Why didn't users adopt? (OCR issues? Workflow mismatch? Trust issues?)
-- Do we need to change the approach or is the problem not worth solving?
-- Don't build Phase 2 until Phase 1 proves value
-
----
-
-## Related Documents
-
-- **PRD:** `aiDocs/prd.md` — Full product requirements across all phases
-- **Context:** `aiDocs/context.md` — Project overview and current focus
-- **Market Fit:** `recipe-app-market-fit.md` — Market analysis and competitive landscape
-- **Architecture:** `aiDocs/architecture.md` — Technical design
-- **Roadmap:** `aiDocs/roadmap.md` — 6-week implementation checklist
+### iOS App (secondary)
+- App source: `ios/RecipeScannerApp/Sources`
