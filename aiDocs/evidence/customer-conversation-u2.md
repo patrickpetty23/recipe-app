@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Date: February 26, 2026
+- Date: February 25, 2026
 - Participant: U2 (anonymized), roommate and undergrad student, social-recipe heavy workflow
 - Session type: Live moderated usability + interview
 - Duration: 17 minutes

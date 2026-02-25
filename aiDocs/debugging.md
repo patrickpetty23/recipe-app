@@ -9,6 +9,12 @@ The web demo (`demo/mobileview/`) is debugged using browser DevTools:
 3. Application tab → Local Storage to inspect persisted state
 4. Network tab to verify proxy requests to `localhost:8765`
 
+Structured event logging is built into the mobile demo:
+
+- In-memory/localStorage event log (`state.logs`) in `demo/mobileview/app.js`
+- Settings tab shows last 20 events and supports `Copy Logs`
+- Event examples: `ocr_started`, `ocr_completed`, `ocr_failed`, `meal_analysis_started`, `recipe_saved`
+
 ### Common Web Demo Issues
 
 1. **OCR returns no text**: Check console for Tesseract.js errors. Try cloud OCR (toggle in Settings, requires proxy).

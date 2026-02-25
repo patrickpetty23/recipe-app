@@ -44,7 +44,7 @@
 ## Session Metadata
 
 - Session ID: U2
-- Date: February 26, 2026
+- Date: February 25, 2026
 - Participant profile: Roommate #2, undergrad student, cooks 3 nights/week, heavy Instagram/Pinterest user
 - Interviewer: Team member (Timur)
 
@@ -83,7 +83,7 @@
 ## Session Metadata
 
 - Session ID: U3
-- Date: February 27, 2026
+- Date: February 25, 2026
 - Participant profile: Roommate #3, ELS student from Peru, cooks Peruvian meals 4 nights/week
 - Interviewer: Team member (Timur)
 

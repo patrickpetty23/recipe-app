@@ -48,6 +48,6 @@ A formal falsification attempt was run and documented in:
 
 Summary:
 
-1. Overall app flow was 41% faster than manual baseline across pilot users.
-2. Screenshot-heavy inputs were only 28% faster, revealing a clear weak point.
-3. Result: core hypothesis stands, but screenshot-noise handling remains the highest-risk area.
+1. In planted-error testing, participants did not consistently catch all extraction errors without guidance.
+2. In live pilot sessions, users still reported the app flow as faster than their manual method.
+3. Result: the problem remains valid, but trust requires explicit review cues and stronger screenshot-noise filtering.

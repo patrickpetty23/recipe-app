@@ -25,6 +25,7 @@ Rubric support docs:
 - `debugging.md`
 - `rubric-deliverables.md`
 - `presentation-outline.md`
+- `process-iteration-log.md`
 
 Evidence folder:
 
@@ -34,8 +35,8 @@ Evidence folder:
 - `evidence/customer-conversation-u1.md`
 - `evidence/customer-conversation-u2.md`
 - `evidence/customer-conversation-u3.md`
+- `evidence/mcp-verification.md`
 
 Presentation folder:
 
 - `../presentation/RecipeScanner_Midterm_Presentation.pptx`
-- `../presentation/RecipeScanner_Midterm_Presentation_v2.pptx`

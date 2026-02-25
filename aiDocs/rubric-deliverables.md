@@ -13,18 +13,21 @@ This document maps repository artifacts to the BYU midterm rubric categories.
 - `aiDocs/context.md`
 - `aiDocs/ai-infrastructure.md`
 - `aiDocs/mcp-checklist.md`
+- `aiDocs/evidence/mcp-verification.md`
 - `Package.swift` (shared AI-friendly testable core module boundary)
 - `.gitignore` (secrets and local artifacts excluded)
 - `ios/RecipeScannerApp/project.yml` (repeatable iOS project generation)
 
 ### 3. Phase-by-Phase Implementation
 - `aiDocs/roadmap.md` (completed checklists)
+- `aiDocs/process-iteration-log.md` (session timeline + plan/implement/review traceability)
 - Web demo source in `demo/mobileview/`
 - Proxy server: `scripts/ocr_proxy_server.py`
 - Swift source in `ios/RecipeScannerApp` + `Sources/RecipeCore`
 
 ### 4. Structured Logging and Debugging
 - `aiDocs/debugging.md`
+- `demo/mobileview/app.js` (structured event log in primary demo)
 - `ios/RecipeScannerApp/Sources/Services/AppLogger.swift`
 - `scripts/run-cli-tests.ps1`
 - `fixtures/parser-fixtures.json`
@@ -67,4 +70,3 @@ This document maps repository artifacts to the BYU midterm rubric categories.
 - iOS app source: `ios/RecipeScannerApp`
 - Suggested narrative: `aiDocs/presentation-outline.md`
 - PPTX deck: `presentation/RecipeScanner_Midterm_Presentation.pptx`
-- PPTX deck (visual-heavy): `presentation/RecipeScanner_Midterm_Presentation_v2.pptx`

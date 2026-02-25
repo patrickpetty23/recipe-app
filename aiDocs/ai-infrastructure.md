@@ -34,6 +34,10 @@ Recommended branch workflow:
 3. focused commits linked to roadmap checkboxes
 4. PR descriptions include test/log evidence references
 
+Current process evidence is indexed in:
+- `aiDocs/process-iteration-log.md`
+- `aiDocs/evidence/mcp-verification.md`
+
 ## Cross-Platform Notes
 
 1. Web demo runs on any OS with a browser (`python -m http.server 5500`).

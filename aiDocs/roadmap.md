@@ -62,6 +62,8 @@
 - [x] One completed 2x2 differentiation grid
 - [x] Leverage-point system architecture target diagram
 - [x] Presentation-oriented deliverables checklist
+- [x] Process iteration log with session-level traceability
+- [x] MCP local verification evidence artifact
 
 ## Remaining Work (Future)
 

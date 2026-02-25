@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Date: February 27, 2026
+- Date: February 25, 2026
 - Participant: U3 (anonymized), roommate and ELS student from Peru
 - Session type: Live moderated usability + interview
 - Duration: 18 minutes

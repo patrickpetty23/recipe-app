@@ -13,6 +13,7 @@ Use this checklist before presentation to demonstrate AI infrastructure readines
 1. Show one MCP-assisted workflow step during development/demo.
 2. Reference docs used by AI (`aiDocs/context.md`, `aiDocs/prd.md`, `aiDocs/roadmap.md`).
 3. Show git commit history that reflects iterative sessions.
+4. Keep a local verification artifact (`aiDocs/evidence/mcp-verification.md`).
 
 ## Pass Condition
 

@@ -9,6 +9,7 @@
 const STORAGE_KEY = "recipe-scanner-demo.v5";
 const OCR_PROXY_ENDPOINT = "http://127.0.0.1:8765/ocr";
 const OCR_PROXY_TIMEOUT_MS = 120_000;
+const MAX_LOGS = 240;
 
 const NAV_META = {
   "scan-view":     { title: "Scanner",       action: null },
@@ -148,11 +149,30 @@ function formatDate(iso) {
 
 function clamp(v, lo = 0, hi = 1) { return Math.max(lo, Math.min(hi, v)); }
 
+function logEvent(level, event, metadata = {}) {
+  const safeMetadata = {};
+  for (const [key, value] of Object.entries(metadata || {})) {
+    safeMetadata[key] = String(value);
+  }
+
+  state.logs.push({
+    timestamp: new Date().toISOString(),
+    level: String(level || "info"),
+    event: String(event || "event"),
+    metadata: safeMetadata,
+  });
+
+  if (state.logs.length > MAX_LOGS) {
+    state.logs = state.logs.slice(state.logs.length - MAX_LOGS);
+  }
+}
+
 // ─── State ───
 function makeDefaultState() {
   return {
     recipes: [],
     activeShoppingList: null,
+    logs: [],
     selectedImageDataUrl: null,
     draftRecipeName: "",
     draftIngredients: [],
@@ -187,6 +207,7 @@ function loadState() {
       ...fallback,
       recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
       activeShoppingList: parsed.activeShoppingList || null,
+      logs: Array.isArray(parsed.logs) ? parsed.logs : [],
       settings: { ...fallback.settings, ...(parsed.settings || {}) },
       ui: { activeView: NAV_META[parsed?.ui?.activeView] ? parsed.ui.activeView : "scan-view" },
     };
@@ -199,6 +220,7 @@ function saveState() {
   const payload = {
     recipes: state.recipes,
     activeShoppingList: state.activeShoppingList,
+    logs: state.logs,
     settings: state.settings,
     ui: { activeView: state.ui.activeView },
   };
@@ -237,6 +259,8 @@ const dom = {
   thresholdSlider:   $("threshold-slider"),
   thresholdValue:    $("threshold-value"),
   resetAllBtn:       $("reset-all-btn"),
+  copyLogsBtn:       $("copy-logs-btn"),
+  logsPreview:       $("logs-preview"),
   editorSheet:       $("editor-sheet"),
   editorClose:       $("editor-close"),
   editorSave:        $("editor-save"),
@@ -1031,6 +1055,12 @@ function renderSettings() {
   dom.cloudToggle.checked = !!state.settings.useCloudFallback;
   dom.thresholdSlider.value = String(state.settings.lowConfidenceThreshold);
   dom.thresholdValue.textContent = String(Math.round(state.settings.lowConfidenceThreshold * 100));
+  if (dom.logsPreview) {
+    const tail = state.logs.slice(-20);
+    dom.logsPreview.textContent = tail.length
+      ? tail.map((entry) => JSON.stringify(entry)).join("\n")
+      : "No logs yet.";
+  }
 }
 
 function renderEditor() {
@@ -1167,6 +1197,7 @@ function renderAll() {
 function showView(viewId) {
   if (!NAV_META[viewId]) return;
   state.ui.activeView = viewId;
+  logEvent("info", "view_changed", { view: viewId });
   saveState();
   renderAll();
 }
@@ -1197,10 +1228,12 @@ async function onSelectImageFile(input) {
     state.ui.extractProgress = "";
     state.ocrConfidence = 0;
     state.ocrSource = null;
+    logEvent("info", "image_selected", { image_count: state.selectedImages.length });
     saveState();
     renderAll();
   } catch (e) {
     state.scanErrorMessage = e.message || "Failed to read image.";
+    logEvent("error", "image_select_failed", { error: state.scanErrorMessage });
     renderScanStatus();
   } finally { input.value = ""; }
 }
@@ -1224,6 +1257,7 @@ function loadSampleRecipe() {
   state.scanErrorMessage = null;
   state.draftSteps = [];
   state.showEditor = true;
+  logEvent("info", "sample_recipe_loaded");
 
   saveState();
   renderAll();
@@ -1235,6 +1269,7 @@ async function processSelectedImage() {
 
   if (!images.length) {
     state.scanErrorMessage = "Select or capture a recipe image first.";
+    logEvent("warning", "ocr_no_image_selected");
     renderAll();
     return;
   }
@@ -1243,6 +1278,7 @@ async function processSelectedImage() {
   state.scanErrorMessage = null;
   state.lowConfidenceWarning = null;
   state.ui.extractProgress = "Initializing OCR…";
+  logEvent("info", "ocr_started", { image_count: images.length });
   renderAll();
 
   try {
@@ -1297,19 +1333,33 @@ async function processSelectedImage() {
     if (!effectiveIngredients.length || tooNoisy) {
       state.scanErrorMessage = `No ingredient lines found from ${source || "OCR"}. Try clearer images or add ingredients manually.`;
       state.showEditor = false;
+      logEvent("warning", "ocr_no_ingredients", { source: source || "unknown" });
       return;
     }
 
     if (avgConfidence < state.settings.lowConfidenceThreshold) {
       state.lowConfidenceWarning = "Low OCR confidence — review extracted lines before saving.";
+      logEvent("warning", "ocr_low_confidence", {
+        confidence: avgConfidence.toFixed(2),
+        source: source || "unknown",
+      });
     } else if ((effectiveMetrics.avgNameQuality || 0) < 0.62) {
       state.lowConfidenceWarning = "Ingredient text quality is low — verify each line.";
+      logEvent("warning", "ocr_low_name_quality", {
+        avg_name_quality: String((effectiveMetrics.avgNameQuality || 0).toFixed(2)),
+      });
     }
 
     state.showEditor = true;
+    logEvent("info", "ocr_completed", {
+      ingredient_count: effectiveIngredients.length,
+      source: source || "unknown",
+      confidence: avgConfidence.toFixed(2),
+    });
   } catch (e) {
     state.scanErrorMessage = (e instanceof Error ? e.message : String(e)) ||
       "No readable text detected. Use a recipe screenshot with visible ingredients.";
+    logEvent("error", "ocr_failed", { error: state.scanErrorMessage });
   } finally {
     state.isProcessing = false;
     state.ui.extractProgress = "";
@@ -1343,9 +1393,11 @@ async function onSelectMealImageFile(input) {
   try {
     state.mealImageDataUrl = await readFileAsDataUrl(file);
     state.ui.mealError = null;
+    logEvent("info", "meal_image_selected");
     renderAll();
   } catch (e) {
     state.ui.mealError = e.message || "Failed to read image.";
+    logEvent("error", "meal_image_select_failed", { error: state.ui.mealError });
     renderMealMode();
   } finally { input.value = ""; }
 }
@@ -1365,6 +1417,7 @@ function loadSampleMeal() {
   state.draftSteps = meal.steps || [];
   state.usedSample = true;
   state.showEditor = true;
+  logEvent("info", "sample_meal_loaded");
   renderAll();
 }
 
@@ -1383,6 +1436,7 @@ async function runMealAnalysis(imageDataUrl) {
 async function processMealImage() {
   if (!state.mealImageDataUrl) {
     state.ui.mealError = "Select a meal photo first.";
+    logEvent("warning", "meal_no_image_selected");
     renderMealMode();
     return;
   }
@@ -1390,6 +1444,7 @@ async function processMealImage() {
   state.isProcessing = true;
   state.ui.mealError = null;
   state.ui.mealProgress = "Sending to AI for analysis…";
+  logEvent("info", "meal_analysis_started");
   renderAll();
 
   try {
@@ -1406,9 +1461,14 @@ async function processMealImage() {
     }));
     state.draftSteps = result.steps || [];
     state.showEditor = true;
+    logEvent("info", "meal_analysis_completed", {
+      recipe_name: result.name || "Identified Meal",
+      ingredient_count: (result.ingredients || []).length,
+    });
   } catch (e) {
     state.ui.mealError = (e instanceof Error ? e.message : String(e)) ||
       "Meal analysis failed. Check your API key and try again.";
+    logEvent("error", "meal_analysis_failed", { error: state.ui.mealError });
   } finally {
     state.isProcessing = false;
     state.ui.mealProgress = "";
@@ -1470,6 +1530,10 @@ function saveRecipeAndGenerateList() {
   state.mealImageDataUrl = null;
   state.usedSample = false;
 
+  logEvent("info", "recipe_saved", {
+    recipe_id: recipe.id,
+    ingredient_count: recipe.ingredients.length,
+  });
   saveState();
   showView("shopping-view");
 }
@@ -1494,6 +1558,7 @@ function regenerateShoppingList(recipeId) {
   const recipe = state.recipes.find((r) => r.id === recipeId);
   if (!recipe) return;
   state.activeShoppingList = shoppingListFromRecipe(recipe);
+  logEvent("info", "shopping_list_regenerated", { recipe_id: recipeId });
   saveState();
   showView("shopping-view");
 }
@@ -1501,6 +1566,7 @@ function regenerateShoppingList(recipeId) {
 function mergeAllRecipes() {
   if (state.recipes.length < 2) return;
   state.activeShoppingList = mergeShoppingListFromRecipes(state.recipes);
+  logEvent("info", "shopping_list_merged", { recipe_count: state.recipes.length });
   saveState();
   showView("shopping-view");
 }
@@ -1508,6 +1574,7 @@ function mergeAllRecipes() {
 function deleteRecipe(recipeId) {
   state.recipes = state.recipes.filter((r) => r.id !== recipeId);
   if (state.detail.recipeId === recipeId) state.detail.recipeId = null;
+  logEvent("warning", "recipe_deleted", { recipe_id: recipeId });
   saveState();
   renderAll();
 }
@@ -1518,12 +1585,14 @@ function toggleShoppingItem(itemId, checked) {
   const item = list.items.find((i) => i.id === itemId);
   if (!item) return;
   item.isChecked = !!checked;
+  logEvent("info", "shopping_item_toggled", { item_id: itemId, checked: item.isChecked });
   saveState();
   renderShopping();
 }
 
 function clearShoppingList() {
   state.activeShoppingList = null;
+  logEvent("warning", "shopping_list_cleared");
   saveState();
   renderAll();
 }
@@ -1531,7 +1600,21 @@ function clearShoppingList() {
 function resetAllData() {
   localStorage.removeItem(STORAGE_KEY);
   Object.assign(state, makeDefaultState());
+  logEvent("warning", "demo_data_reset");
+  saveState();
   renderAll();
+}
+
+async function copyLogs() {
+  const payload = state.logs.map((line) => JSON.stringify(line)).join("\n");
+  try {
+    await navigator.clipboard.writeText(payload || "No logs.");
+    logEvent("info", "logs_copied", { line_count: state.logs.length });
+  } catch {
+    logEvent("warning", "logs_copy_failed");
+  }
+  saveState();
+  renderSettings();
 }
 
 // ─── Confirm Dialog ───
@@ -1640,6 +1723,10 @@ function bindEvents() {
     showConfirm("Reset All Data?", "This clears all recipes, shopping lists, and settings.", resetAllData);
   });
 
+  if (dom.copyLogsBtn) {
+    dom.copyLogsBtn.addEventListener("click", () => { void copyLogs(); });
+  }
+
   // Detail sheet
   dom.detailClose.addEventListener("click", closeDetail);
   dom.detailGenerate.addEventListener("click", () => {
@@ -1687,6 +1774,7 @@ function bindEvents() {
 // ──────────────────────────────────────────────
 
 function init() {
+  logEvent("info", "mobile_demo_loaded");
   bindEvents();
   renderAll();
 }
