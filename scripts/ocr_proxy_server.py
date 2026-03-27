@@ -15,9 +15,11 @@ Default behavior:
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -35,6 +37,47 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_PROJECT_ID = os.getenv("OPENAI_PROJECT_ID", "")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "90"))
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+_PRODUCTION_MODEL_PATH = os.path.join(ROOT_DIR, "reports", "production_model.json")
+_MODEL_META_PATH = os.path.join(ROOT_DIR, "reports", "model_meta.json")
+DECAY_MODEL_META = _PRODUCTION_MODEL_PATH if os.path.exists(_PRODUCTION_MODEL_PATH) else _MODEL_META_PATH
+DECAY_USDA_PATH = os.path.join(ROOT_DIR, "data", "usda_shelf_life.json")
+DECAY_SERVICE = None
+DECAY_LOAD_ERROR = None
+
+try:
+    from ml.inference_service import InferenceService, load_model_path, load_usda_map
+except Exception as error:  # noqa: BLE001
+    InferenceService = None
+    load_model_path = None
+    load_usda_map = None
+    DECAY_LOAD_ERROR = f"ML service import failed: {error}"
+
+
+def get_decay_service() -> tuple[Any | None, str | None]:
+    global DECAY_SERVICE, DECAY_LOAD_ERROR  # noqa: PLW0603
+    if DECAY_SERVICE is not None:
+        return DECAY_SERVICE, None
+    if DECAY_LOAD_ERROR:
+        return None, DECAY_LOAD_ERROR
+    if not (load_model_path and load_usda_map and InferenceService):
+        return None, "ML service not available"
+    try:
+        if not os.path.exists(DECAY_MODEL_META):
+            return None, f"Missing model meta file: {DECAY_MODEL_META}"
+        if not os.path.exists(DECAY_USDA_PATH):
+            return None, f"Missing USDA mapping: {DECAY_USDA_PATH}"
+        model_path = load_model_path(DECAY_MODEL_META)
+        usda_map = load_usda_map(DECAY_USDA_PATH)
+        DECAY_SERVICE = InferenceService(model_path, usda_map)
+        return DECAY_SERVICE, None
+    except Exception as error:  # noqa: BLE001
+        DECAY_LOAD_ERROR = f"Failed to load ML service: {error}"
+        return None, DECAY_LOAD_ERROR
 
 COMMON_UNITS = {
     "c",
@@ -433,6 +476,213 @@ def extract_structured_ingredients(lines: list[dict[str, Any]]) -> dict[str, Any
     }
 
 
+def infer_source_type_from_url(url: str) -> str:
+    host = urllib.parse.urlparse(url).netloc.lower()
+    host = host.replace("www.", "")
+    if re.search(r"(tiktok|pinterest|instagram|youtube|youtu\.be)", host):
+        return "social_url"
+    return "recipe_url"
+
+
+def strip_html_to_text(html_text: str) -> str:
+    text = re.sub(r"(?is)<(script|style)\b.*?>.*?</\1>", " ", html_text)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p>|</li>|</div>|</h\d>", "\n", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"\r", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return "\n".join(clean_line(line) for line in text.splitlines() if clean_line(line))
+
+
+def extract_title_from_html(html_text: str) -> str | None:
+    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html_text)
+    if not match:
+        return None
+    return clean_line(html.unescape(match.group(1)))
+
+
+def extract_json_ld_candidates(html_text: str) -> list[Any]:
+    blocks = re.findall(
+        r'(?is)<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html_text,
+    )
+    candidates: list[Any] = []
+    for block in blocks:
+        cleaned = html.unescape(block).strip()
+        if not cleaned:
+            continue
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            continue
+        candidates.append(parsed)
+    return candidates
+
+
+def flatten_json_ld_nodes(node: Any) -> list[dict[str, Any]]:
+    if isinstance(node, list):
+        out: list[dict[str, Any]] = []
+        for item in node:
+            out.extend(flatten_json_ld_nodes(item))
+        return out
+    if isinstance(node, dict):
+        if isinstance(node.get("@graph"), list):
+            return flatten_json_ld_nodes(node["@graph"])
+        return [node]
+    return []
+
+
+def find_recipe_node(candidates: list[Any]) -> dict[str, Any] | None:
+    for candidate in candidates:
+        for node in flatten_json_ld_nodes(candidate):
+            node_type = node.get("@type")
+            types = node_type if isinstance(node_type, list) else [node_type]
+            normalized = {str(item).lower() for item in types if item}
+            if "recipe" in normalized:
+                return node
+    return None
+
+
+def coerce_instruction_steps(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, str):
+        lines = [clean_line(line) for line in value.splitlines() if clean_line(line)]
+        return [
+            {"step": idx + 1, "instruction": line, "temperature": None, "duration": None}
+            for idx, line in enumerate(lines)
+        ]
+
+    if isinstance(value, list):
+        steps: list[dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, str):
+                instruction = clean_line(item)
+            elif isinstance(item, dict):
+                instruction = clean_line(
+                    item.get("text")
+                    or item.get("name")
+                    or item.get("itemListElement")
+                    or ""
+                )
+            else:
+                instruction = ""
+            if instruction:
+                steps.append(
+                    {
+                        "step": len(steps) + 1,
+                        "instruction": instruction,
+                        "temperature": None,
+                        "duration": None,
+                    }
+                )
+        return steps
+    return []
+
+
+def coerce_ingredient_items(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+    parsed_items: list[dict[str, Any]] = []
+    for item in items:
+        line = clean_line(str(item))
+        if not line:
+            continue
+        parsed = parse_ingredient_line(line, 0.9)
+        if parsed:
+            parsed_items.append(parsed)
+        else:
+            parsed_items.append(
+                {
+                    "name": line,
+                    "quantity": None,
+                    "unit": None,
+                    "confidence": 0.72,
+                    "rawLine": line,
+                }
+            )
+    return parsed_items
+
+
+def build_text_recipe_fallback(url: str, html_text: str) -> dict[str, Any]:
+    raw_text = strip_html_to_text(html_text)
+    lines = [{"text": line, "confidence": 0.82} for line in raw_text.splitlines() if clean_line(line)]
+    structured = extract_structured_ingredients(lines[:250])
+    title = extract_title_from_html(html_text) or urllib.parse.urlparse(url).netloc
+    return {
+        "name": title,
+        "description": None,
+        "sourceType": infer_source_type_from_url(url),
+        "sourceTitle": urllib.parse.urlparse(url).netloc.replace("www.", ""),
+        "sourceUrl": url,
+        "importMethod": "url_fetch_fallback",
+        "importSourceLabel": "proxy URL import",
+        "importConfidence": 0.68 if structured["ingredients"] else 0.42,
+        "rawText": raw_text[:12000],
+        "ingredients": structured["ingredients"],
+        "droppedLines": structured["droppedLines"][:40],
+        "steps": [],
+        "warning": (
+            "Structured recipe data was not detected. Review this draft carefully before saving."
+            if structured["ingredients"]
+            else "Only a weak draft could be created from this URL. Add ingredients and steps manually."
+        ),
+    }
+
+
+def import_recipe_from_url(url: str) -> dict[str, Any]:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("URL must start with http:// or https://")
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; RecipeML/1.0; +https://local.recipe-app)",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        method="GET",
+    )
+
+    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw_bytes = response.read()
+        content_type = response.headers.get_content_charset() or "utf-8"
+        html_text = raw_bytes.decode(content_type, errors="replace")
+
+    recipe_node = find_recipe_node(extract_json_ld_candidates(html_text))
+    source_type = infer_source_type_from_url(url)
+    source_title = urllib.parse.urlparse(url).netloc.replace("www.", "")
+
+    if recipe_node:
+        name = clean_line(str(recipe_node.get("name") or "")) or extract_title_from_html(html_text) or source_title
+        description = clean_line(str(recipe_node.get("description") or "")) or None
+        ingredients = coerce_ingredient_items(recipe_node.get("recipeIngredient"))
+        steps = coerce_instruction_steps(recipe_node.get("recipeInstructions"))
+        raw_text_parts = [name]
+        raw_text_parts.extend(item.get("rawLine") or item.get("name") or "" for item in ingredients)
+        raw_text_parts.extend(step.get("instruction") or "" for step in steps)
+        raw_text = "\n".join(part for part in raw_text_parts if clean_line(part))
+        warning = None
+        if not ingredients and not steps:
+            warning = "Recipe metadata was found, but ingredient and step extraction was limited."
+        return {
+            "name": name,
+            "description": description,
+            "sourceType": source_type,
+            "sourceTitle": source_title,
+            "sourceUrl": url,
+            "importMethod": "url_fetch_jsonld",
+            "importSourceLabel": "proxy URL import",
+            "importConfidence": 0.92 if ingredients or steps else 0.74,
+            "rawText": raw_text[:12000],
+            "ingredients": ingredients,
+            "droppedLines": [],
+            "steps": steps,
+            "warning": warning,
+        }
+
+    return build_text_recipe_fallback(url, html_text)
+
+
 def call_ocr_space(image_data_url: str, engine: int, api_key: str) -> dict[str, Any]:
     data = urllib.parse.urlencode(
         {
@@ -649,6 +899,7 @@ class OCRProxyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path.rstrip("/") in ("", "/health"):
+            decay_service, decay_error = get_decay_service()
             self._set_headers(200)
             self.wfile.write(
                 json.dumps(
@@ -657,8 +908,10 @@ class OCRProxyHandler(BaseHTTPRequestHandler):
                         "service": "ocr_proxy",
                         "host": HOST,
                         "port": PORT,
-                        "endpoints": ["/ocr", "/analyze-meal"],
+                        "endpoints": ["/ocr", "/analyze-meal", "/decay", "/import-recipe-url"],
                         "hasOpenAIKey": bool(OPENAI_API_KEY.strip()),
+                        "decayReady": decay_service is not None,
+                        "decayError": decay_error,
                     }
                 ).encode("utf-8")
             )
@@ -683,6 +936,12 @@ class OCRProxyHandler(BaseHTTPRequestHandler):
 
         if path == "/analyze-meal":
             self._handle_analyze_meal()
+            return
+        if path == "/decay":
+            self._handle_decay()
+            return
+        if path == "/import-recipe-url":
+            self._handle_import_recipe_url()
             return
 
         if path != "/ocr":
@@ -752,11 +1011,83 @@ class OCRProxyHandler(BaseHTTPRequestHandler):
                 json.dumps({"ok": False, "error": str(error)}).encode("utf-8")
             )
 
+    def _handle_decay(self) -> None:
+        """Handle POST /decay — ML pantry decay prediction."""
+        payload, error = self._read_json_body()
+        if error:
+            self._set_headers(400)
+            self.wfile.write(json.dumps({"ok": False, "error": error}).encode("utf-8"))
+            return
+
+        required = [
+            "item_category",
+            "quantity_oz",
+            "household_size",
+            "meals_per_week",
+            "is_staple",
+        ]
+        missing = [key for key in required if payload.get(key) in (None, "")]
+        if missing:
+            self._set_headers(400)
+            self.wfile.write(
+                json.dumps({"ok": False, "error": f"Missing fields: {', '.join(missing)}"}).encode("utf-8")
+            )
+            return
+
+        service, service_error = get_decay_service()
+        if service_error or service is None:
+            self._set_headers(502)
+            self.wfile.write(
+                json.dumps({"ok": False, "error": service_error or "ML service unavailable"}).encode("utf-8")
+            )
+            return
+
+        try:
+            result = service.predict(payload)
+            # Prediction is logged to SQLite via service.predict() — no secondary log needed
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"ok": True, "result": result}).encode("utf-8"))
+        except Exception as error:  # noqa: BLE001
+            self._set_headers(502)
+            self.wfile.write(json.dumps({"ok": False, "error": str(error)}).encode("utf-8"))
+
+    def _handle_import_recipe_url(self) -> None:
+        """Handle POST /import-recipe-url for backend-assisted recipe URL imports."""
+        payload, error = self._read_json_body()
+        if error:
+            self._set_headers(400)
+            self.wfile.write(json.dumps({"ok": False, "error": error}).encode("utf-8"))
+            return
+
+        source_url = clean_line(str(payload.get("url") or ""))
+        if not source_url:
+            self._set_headers(400)
+            self.wfile.write(json.dumps({"ok": False, "error": "url is required"}).encode("utf-8"))
+            return
+
+        try:
+            result = import_recipe_from_url(source_url)
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"ok": True, "result": result}).encode("utf-8"))
+        except urllib.error.HTTPError as http_error:
+            self._set_headers(502)
+            self.wfile.write(
+                json.dumps({"ok": False, "error": f"URL fetch failed with HTTP {http_error.code}"}).encode("utf-8")
+            )
+        except urllib.error.URLError as url_error:
+            self._set_headers(502)
+            self.wfile.write(
+                json.dumps({"ok": False, "error": f"URL fetch failed: {url_error.reason}"}).encode("utf-8")
+            )
+        except Exception as import_error:  # noqa: BLE001
+            self._set_headers(502)
+            self.wfile.write(json.dumps({"ok": False, "error": str(import_error)}).encode("utf-8"))
+
 
 def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), OCRProxyHandler)
     print(f"[ocr_proxy] listening on http://{HOST}:{PORT}", flush=True)
-    print("[ocr_proxy] endpoints: POST /ocr, POST /analyze-meal, GET /health", flush=True)
+    print("[ocr_proxy] endpoints: POST /ocr, POST /analyze-meal, POST /decay, POST /import-recipe-url, GET /health", flush=True)
     if OPENAI_API_KEY.strip():
         print("[ocr_proxy] OpenAI API key detected — meal analysis enabled", flush=True)
     else:

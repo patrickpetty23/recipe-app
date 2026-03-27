@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
   <link rel="stylesheet" href="styles.css">
   <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script defer src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </head>
 <body>
 
@@ -47,6 +47,15 @@
 
           <!-- ═══ RECIPE SCANNING MODE ═══ -->
           <div id="recipe-mode" class="scan-mode-panel">
+            <label class="field-label" for="scan-source-type">Import Source</label>
+            <select id="scan-source-type" class="text-input">
+              <option value="cookbook_photo">Cookbook Page</option>
+              <option value="printed_recipe_photo">Printed Recipe</option>
+              <option value="handwritten_card_photo">Handwritten Card</option>
+              <option value="screenshot">Screenshot</option>
+              <option value="manual_entry">Manual Draft</option>
+            </select>
+
             <div class="btn-row">
               <button class="btn btn-primary" id="open-camera-btn">
                 <span class="btn-icon">📷</span> Camera
@@ -73,7 +82,23 @@
             <button class="btn btn-primary btn-full" id="extract-btn" disabled>
               Extract Ingredients
             </button>
+            <button class="btn btn-secondary btn-full" id="start-blank-recipe-btn">
+              Start Blank Recipe
+            </button>
             <p class="progress-text" id="extract-progress"></p>
+
+            <div class="import-panel">
+              <h3>Web And Social Import</h3>
+              <p class="meta-text">Paste a recipe or social post link. Optionally add caption text, ingredient text, or directions to create an editable draft.</p>
+
+              <label class="field-label" for="recipe-url-input">Recipe Or Social URL</label>
+              <input id="recipe-url-input" type="url" class="text-input" placeholder="https://example.com/recipe-or-post">
+
+              <label class="field-label" for="recipe-text-input">Optional Recipe Text Or Caption</label>
+              <textarea id="recipe-text-input" class="text-input" rows="5" placeholder="Paste ingredients, instructions, or social caption text here for a better draft"></textarea>
+
+              <button class="btn btn-secondary btn-full" id="import-url-btn">Create Draft From URL</button>
+            </div>
 
             <div class="alert alert-warning hidden" id="warning-msg"></div>
             <div class="alert alert-error hidden" id="error-msg"></div>
@@ -127,10 +152,65 @@
       <!-- === RECIPES VIEW === -->
       <section class="view" id="recipes-view">
         <div class="scroll-area">
+          <div class="import-panel">
+            <h3>Weekly Meal Plan</h3>
+            <p class="meta-text" id="meal-plan-range">This week</p>
+
+            <label class="field-label" for="meal-plan-day-select">Add Recipes To</label>
+            <select id="meal-plan-day-select" class="text-input"></select>
+
+            <label class="field-label" for="meal-plan-slot-select">Meal Slot</label>
+            <select id="meal-plan-slot-select" class="text-input">
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner" selected>Dinner</option>
+            </select>
+
+            <button class="btn btn-primary btn-full" id="generate-plan-list-btn">Build Shopping List From Plan</button>
+            <button class="btn btn-secondary btn-full" id="copy-week-plan-btn">Copy This Week To Next Week</button>
+            <p class="meta-text" id="meal-plan-summary">0 of 21 meal slots planned</p>
+            <div id="meal-plan-list" class="card-stack" style="margin-top:12px"></div>
+          </div>
+
+          <div class="import-panel">
+            <h3>Filter Recipes</h3>
+            <label class="field-label" for="recipes-search-input">Search</label>
+            <input id="recipes-search-input" type="text" class="text-input" placeholder="Search by title, tag, or source">
+
+            <label class="field-label" for="recipes-source-filter">Source Type</label>
+            <select id="recipes-source-filter" class="text-input">
+              <option value="all">All Sources</option>
+              <option value="cookbook_photo">Cookbook Page</option>
+              <option value="printed_recipe_photo">Printed Recipe</option>
+              <option value="handwritten_card_photo">Handwritten Card</option>
+              <option value="screenshot">Screenshot</option>
+              <option value="recipe_url">Recipe URL</option>
+              <option value="social_url">Social Recipe</option>
+              <option value="manual_entry">Manual Entry</option>
+              <option value="meal_photo_generated">Meal Photo AI</option>
+            </select>
+
+            <label class="field-label" for="recipes-sort-select">Sort</label>
+            <select id="recipes-sort-select" class="text-input">
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="title">Title A-Z</option>
+            </select>
+
+            <label class="toggle-row" style="margin-top:12px">
+              <span>Show Compatible Only</span>
+              <div class="toggle-switch">
+                <input type="checkbox" id="recipes-compatible-only">
+                <span class="toggle-slider"></span>
+              </div>
+            </label>
+          </div>
+
           <div id="recipes-empty" class="empty-state">
             <div class="empty-icon">📖</div>
             <h3>No Saved Recipes</h3>
-            <p>Scanned recipes appear here for quick reuse.</p>
+            <p>Import your first recipe from a photo, URL, or enter it manually.</p>
+            <button class="btn btn-primary btn-empty-action" data-action="go-scan">Import a Recipe</button>
           </div>
           <div id="recipes-list" class="card-stack"></div>
         </div>
@@ -142,16 +222,92 @@
           <div id="shopping-empty" class="empty-state">
             <div class="empty-icon">🛒</div>
             <h3>No Shopping List</h3>
-            <p>Scan a recipe and save it to generate your shopping checklist.</p>
+            <p>Plan meals for the week or save a recipe to generate your shopping list.</p>
+            <button class="btn btn-primary btn-empty-action" data-action="go-recipes">Go to Recipes</button>
           </div>
           <div id="shopping-summary" class="shopping-summary hidden"></div>
           <div id="shopping-list" class="card-stack"></div>
         </div>
       </section>
 
+      <!-- === PANTRY VIEW === -->
+      <section class="view" id="pantry-view">
+        <div class="scroll-area">
+          <div class="settings-card">
+            <h3>My Pantry</h3>
+            <p class="meta-text">Track what you already have so shopping hints can stay conservative and useful.</p>
+
+            <label class="field-label" for="pantry-name-input">Item Name</label>
+            <input id="pantry-name-input" type="text" class="text-input" placeholder="Milk">
+
+            <label class="field-label" for="pantry-quantity-input">Quantity</label>
+            <input id="pantry-quantity-input" type="text" class="text-input" placeholder="64">
+
+            <label class="field-label" for="pantry-unit-input">Unit</label>
+            <input id="pantry-unit-input" type="text" class="text-input" placeholder="oz">
+
+            <label class="field-label" for="pantry-category-input">Category</label>
+            <select id="pantry-category-input" class="text-input">
+              <option value="Produce">Produce</option>
+              <option value="Protein">Protein</option>
+              <option value="Dairy">Dairy</option>
+              <option value="Pantry">Pantry</option>
+              <option value="Frozen">Frozen</option>
+              <option value="Other">Other</option>
+            </select>
+
+            <label class="field-label" for="pantry-date-input">Purchase Date</label>
+            <input id="pantry-date-input" type="date" class="text-input">
+
+            <div class="btn-row">
+              <button class="btn btn-primary" id="pantry-save-btn">Save Pantry Item</button>
+              <button class="btn btn-secondary" id="pantry-cancel-btn">Clear</button>
+            </div>
+
+            <div id="pantry-list" class="card-stack" style="margin-top:12px"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- === SETTINGS VIEW === -->
       <section class="view" id="settings-view">
         <div class="scroll-area">
+
+          <div class="settings-card">
+            <h3>Dietary Profile</h3>
+            <p class="meta-text">Save preferences so recipe details can flag conflicts and suggest practical substitutions.</p>
+
+            <label class="field-label" for="diet-type-select">Diet Type</label>
+            <select id="diet-type-select" class="text-input">
+              <option value="none">None</option>
+              <option value="vegetarian">Vegetarian</option>
+              <option value="vegan">Vegan</option>
+              <option value="pescatarian">Pescatarian</option>
+            </select>
+
+            <label class="field-label" for="allergies-input">Allergies Or Intolerances</label>
+            <input id="allergies-input" type="text" class="text-input" placeholder="dairy, gluten, shellfish">
+
+            <label class="field-label" for="excluded-ingredients-input">Excluded Ingredients</label>
+            <input id="excluded-ingredients-input" type="text" class="text-input" placeholder="mushrooms, cilantro">
+
+            <label class="field-label" for="macro-focus-select">Macro Focus</label>
+            <select id="macro-focus-select" class="text-input">
+              <option value="balanced">Balanced</option>
+              <option value="high_protein">High Protein</option>
+              <option value="lower_carb">Lower Carb</option>
+              <option value="budget">Budget Friendly</option>
+            </select>
+
+            <label class="field-label" for="profile-household">Household Size</label>
+            <input id="profile-household" type="number" class="text-input" min="1" max="12" step="1" value="3">
+
+            <label class="field-label" for="profile-meals">Meals Cooked per Week</label>
+            <input id="profile-meals" type="number" class="text-input" min="1" max="21" step="1" value="7">
+
+            <p class="meta-text" style="margin-top:8px">Household size and meals per week are used to estimate how quickly pantry items are consumed.</p>
+          </div>
+
           <div class="settings-card">
             <h3>Extraction</h3>
             <label class="toggle-row">
@@ -169,6 +325,45 @@
           <div class="settings-card">
             <h3>Privacy</h3>
             <p class="meta-text">On-device OCR is used by default via Tesseract.js in-browser. Enable cloud extraction only if you accept sending images to OCR.Space API through the local proxy server.</p>
+          </div>
+
+          <div class="settings-card">
+            <h3>Predictive Pantry (ML)</h3>
+            <p class="meta-text">Estimate when an item will run out, capped by USDA safety limits. Requires the local proxy server.</p>
+
+            <label class="field-label" for="decay-category">Category</label>
+            <select id="decay-category" class="text-input">
+              <option value="Dairy">Dairy</option>
+              <option value="Produce">Produce</option>
+              <option value="Pantry">Pantry</option>
+              <option value="Meat">Meat</option>
+              <option value="Frozen">Frozen</option>
+              <option value="Other">Other</option>
+            </select>
+
+            <label class="field-label" for="decay-quantity">Quantity (oz)</label>
+            <input id="decay-quantity" type="number" class="text-input" min="1" step="0.5" value="128">
+
+            <label class="field-label" for="decay-staple">Staple Item?</label>
+            <select id="decay-staple" class="text-input">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+
+            <label class="field-label" for="decay-date">Purchase Date</label>
+            <input id="decay-date" type="date" class="text-input">
+
+            <button class="btn btn-primary btn-full" id="decay-run-btn">Run Prediction</button>
+            <p class="progress-text" id="decay-progress"></p>
+            <div class="alert alert-error hidden" id="decay-error"></div>
+
+            <div class="confidence-card hidden" id="decay-result">
+              <div class="confidence-header">
+                <span>Estimated Runout</span>
+                <strong id="decay-use-by">--</strong>
+              </div>
+              <p class="meta-text" id="decay-explanation"></p>
+            </div>
           </div>
 
           <div class="settings-card">
@@ -207,6 +402,10 @@
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
         <span>Shop</span>
       </button>
+      <button class="tab" data-view="pantry-view">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2h8l1 4H7L8 2z"/><rect x="6" y="6" width="12" height="15" rx="2"/><line x1="10" y1="10" x2="14" y2="10"/></svg>
+        <span>Pantry</span>
+      </button>
       <button class="tab" data-view="settings-view">
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <span>Settings</span>
@@ -219,12 +418,55 @@
     <div class="sheet">
       <header class="sheet-header">
         <button class="btn-link" id="editor-close">Cancel</button>
-        <h3>Review Ingredients</h3>
+        <h3 id="editor-title">Review Ingredients</h3>
         <button class="btn-link btn-link-primary" id="editor-save">Save</button>
       </header>
       <div class="sheet-body">
         <label class="field-label" for="recipe-name-input">Recipe Name</label>
         <input id="recipe-name-input" type="text" class="text-input" placeholder="Untitled Recipe">
+
+        <label class="field-label" for="editor-source-type">Source Type</label>
+        <select id="editor-source-type" class="text-input">
+          <option value="cookbook_photo">Cookbook Page</option>
+          <option value="printed_recipe_photo">Printed Recipe</option>
+          <option value="handwritten_card_photo">Handwritten Card</option>
+          <option value="screenshot">Screenshot</option>
+          <option value="recipe_url">Recipe URL</option>
+          <option value="social_url">Social Recipe</option>
+          <option value="manual_entry">Manual Entry</option>
+          <option value="meal_photo_generated">Meal Photo AI</option>
+        </select>
+
+        <label class="field-label" for="recipe-source-title-input">Source Title</label>
+        <input id="recipe-source-title-input" type="text" class="text-input" placeholder="Original recipe title or post name">
+
+        <label class="field-label" for="recipe-source-url-input">Source URL</label>
+        <input id="recipe-source-url-input" type="url" class="text-input" placeholder="https://example.com/recipe">
+
+        <label class="field-label" for="recipe-description-input">Description</label>
+        <textarea id="recipe-description-input" class="text-input" rows="3" placeholder="Optional notes or recipe description"></textarea>
+
+        <label class="field-label" for="recipe-tags-input">Tags</label>
+        <input id="recipe-tags-input" type="text" class="text-input" placeholder="weeknight, high-protein, meal-prep">
+
+        <div class="section-row" style="margin-top:16px">
+          <h4>Nutrition (Optional)</h4>
+        </div>
+        <label class="field-label" for="nutrition-serving-size-input">Serving Size Label</label>
+        <input id="nutrition-serving-size-input" type="text" class="text-input" placeholder="Per serving">
+
+        <div class="ingredient-fields" style="margin-top:8px">
+          <input id="nutrition-calories-input" type="number" min="0" step="1" class="text-input" placeholder="Calories">
+          <input id="nutrition-protein-input" type="number" min="0" step="0.1" class="text-input" placeholder="Protein (g)">
+        </div>
+        <div class="ingredient-fields" style="margin-top:8px">
+          <input id="nutrition-carbs-input" type="number" min="0" step="0.1" class="text-input" placeholder="Carbs (g)">
+          <input id="nutrition-fat-input" type="number" min="0" step="0.1" class="text-input" placeholder="Fat (g)">
+        </div>
+        <div class="ingredient-fields" style="margin-top:8px">
+          <input id="nutrition-fiber-input" type="number" min="0" step="0.1" class="text-input" placeholder="Fiber (g)">
+          <input id="nutrition-sugar-input" type="number" min="0" step="0.1" class="text-input" placeholder="Sugar (g)">
+        </div>
 
         <div class="section-row">
           <h4>Ingredients</h4>
@@ -244,6 +486,7 @@
             <span class="badge" id="steps-count-badge">0</span>
           </div>
           <div id="steps-list" class="steps-stack"></div>
+          <button class="btn btn-secondary btn-full" id="add-step-btn">+ Add Step</button>
         </div>
       </div>
     </div>
@@ -255,13 +498,22 @@
       <header class="sheet-header">
         <button class="btn-link" id="detail-close">Back</button>
         <h3 id="detail-title">Recipe</h3>
-        <button class="btn-link btn-link-primary" id="detail-generate">Shop</button>
+        <div class="detail-header-actions">
+          <button class="btn-link" id="detail-edit">Edit</button>
+          <button class="btn-link btn-link-primary" id="detail-generate">Shop</button>
+        </div>
       </header>
       <div class="sheet-body">
         <div class="image-preview compact hidden" id="detail-image-preview"></div>
+        <div id="detail-source" class="detail-source hidden"></div>
+        <p id="detail-description" class="meta-text hidden"></p>
+        <div id="detail-tags" class="tag-row hidden"></div>
+        <div id="detail-compatibility" class="settings-card hidden"></div>
+        <div id="detail-substitutions" class="settings-card hidden"></div>
         <h4>Ingredients</h4>
         <div id="detail-ingredients" class="card-stack"></div>
         <div id="detail-meta" class="recipe-meta hidden"></div>
+        <div id="detail-nutrition" class="settings-card hidden"></div>
         <div id="detail-steps-section" class="hidden">
           <h4>Steps</h4>
           <div id="detail-steps" class="steps-stack"></div>

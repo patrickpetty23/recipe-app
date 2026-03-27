@@ -374,6 +374,7 @@ h4 { margin: 0; font-size: 0.95rem; font-weight: 600; }
 .empty-icon { font-size: 2.8rem; margin-bottom: 8px; }
 .empty-state h3 { margin-bottom: 6px; }
 .empty-state p { margin: 0; color: var(--text-secondary); font-size: 0.86rem; }
+.btn-empty-action { margin-top: 14px; }
 
 /* ─── Card Stack ─── */
 .card-stack {
@@ -401,10 +402,150 @@ h4 { margin: 0; font-size: 0.95rem; font-weight: 600; }
   font-size: 0.76rem;
 }
 
+.recipe-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.08);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 .recipe-card .recipe-actions {
   display: flex;
   gap: 6px;
   margin-top: 10px;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(52, 199, 89, 0.12);
+  color: #207245;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.nutrition-chip {
+  background: rgba(10, 132, 255, 0.12);
+  color: #1559b8;
+}
+
+button.tag-chip {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hint-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+.hint-have {
+  background: rgba(52, 199, 89, 0.14);
+  color: #1d6d3b;
+}
+
+.hint-low {
+  background: rgba(255, 159, 10, 0.16);
+  color: #9a5b00;
+}
+
+.hint-need {
+  background: rgba(255, 59, 48, 0.14);
+  color: #a42a22;
+}
+
+.hint-note {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.ml-hint-note {
+  margin-top: 6px;
+  font-size: 0.74rem;
+  color: #1559b8;
+  background: rgba(10, 132, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.ml-assumptions {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.68rem;
+  color: #666;
+  font-style: italic;
+}
+
+.shopping-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.compatibility-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.compatibility-ok {
+  background: rgba(52, 199, 89, 0.14);
+  color: #1d6d3b;
+}
+
+.compatibility-warn {
+  background: rgba(255, 159, 10, 0.16);
+  color: #9a5b00;
+}
+
+.compatibility-block {
+  background: rgba(255, 59, 48, 0.14);
+  color: #a42a22;
+}
+
+.compatibility-list,
+.substitution-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+.recipe-compatibility-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.recipe-compatibility-row .compatibility-status {
+  margin-bottom: 0;
 }
 
 /* ─── Shopping Items ─── */
@@ -497,6 +638,23 @@ h4 { margin: 0; font-size: 0.95rem; font-weight: 600; }
 .detail-ingredient strong { font-size: 0.9rem; }
 .detail-ingredient .recipe-meta { margin-top: 2px; color: var(--text-secondary); font-size: 0.76rem; }
 
+.detail-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-source a {
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.detail-source a:hover {
+  text-decoration: underline;
+}
+
 /* ─── Settings ─── */
 .settings-card {
   background: var(--card);
@@ -504,6 +662,19 @@ h4 { margin: 0; font-size: 0.95rem; font-weight: 600; }
   border-radius: var(--radius);
   padding: 14px;
   margin-bottom: 12px;
+}
+
+.import-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.import-panel h3 {
+  margin: 0 0 6px;
+  font-size: 0.92rem;
 }
 
 .settings-card h3 { margin-bottom: 12px; }
@@ -591,7 +762,7 @@ h4 { margin: 0; font-size: 0.95rem; font-weight: 600; }
 /* ─── Tab Bar ─── */
 .tab-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border-top: 0.5px solid var(--border);
   background: rgba(249, 249, 249, 0.94);
   backdrop-filter: blur(20px);
@@ -666,6 +837,11 @@ h4 { margin: 0; font-size: 0.95rem; font-weight: 600; }
   font-size: 0.95rem;
 }
 
+.detail-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 .sheet-body {
   flex: 1;
   overflow-y: auto;

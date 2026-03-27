@@ -1,7 +1,6 @@
 /* ──────────────────────────────────────────────
    Recipe Scanner — Mobile Demo App Logic
-   ES Module build — constants → src/constants.js, parser → src/parser.js,
-                     utils → src/utils.js, state → src/state.js
+   ES Module build — constants extracted to src/constants.js
    ────────────────────────────────────────────── */
 
 import {
@@ -10,28 +9,86 @@ import {
   NAV_META, COMMON_UNITS, BLOCKED_PREFIXES, SECTION_END_PREFIXES,
   INSTRUCTION_HINT_WORDS, STOP_WORDS, INGREDIENT_HINT_WORDS,
   FRACTION_MAP, SAMPLE_RECIPE_TEXT, MEAL_API_ENDPOINT,
-  SAMPLE_MEAL_ANALYSIS,
+  SAMPLE_MEAL_ANALYSIS, RECIPE_SOURCE_LABELS, RECIPE_SOURCE_TYPES,
   MEAL_SLOTS, DIET_CONFLICT_RULES, ALLERGY_PATTERNS, SUBSTITUTION_RULES,
 } from "./src/constants.js";
 
-import {
-  uid, trimToNull, escapeHtml, formatDate, sourceTypeLabel, normalizeSourceType,
-  cleanUrl, hostFromUrl, inferSourceTypeFromUrl, todayIsoDate, clamp,
-  normalizeRecipeTitle, normalizeIngredientName, normalizeIngredient,
-  enrichIngredientFields, normalizeStep, inferLegacyRecipeSourceType,
-  normalizeRecipe, parseTagsInput, normalizePantryItem, normalizeDietaryProfile,
-  normalizeNutritionMeta, emptyDraftNutrition, nutritionBadgesForRecipe,
-  parseDateOnly, isoDateFromDate, startOfWeekIso, weekDates, addDaysIso,
-  formatPlanDateLabel, mealSlotLabel, inferShoppingCategory,
-  PANTRY_DESCRIPTOR_WORDS, INGREDIENT_EXACT_ALIASES, PANTRY_LOOSE_ALIASES,
-  PANTRY_NAME_ALIASES, singularizeToken, canonicalPantryName,
-  canonicalShoppingName, shoppingMergeKey, pantryTokenSet, normalizedUnit,
-  unitFamily, convertAmountToBase,
-} from "./src/utils.js";
-import { state, saveState, makeDefaultState } from "./src/state.js";
 
+// ─── Utility ───
+function uid() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
+function trimToNull(v) {
+  const s = String(v ?? "").trim();
+  return s || null;
+}
 
+function escapeHtml(v) {
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatDate(iso) {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return String(iso);
+  }
+}
+
+function sourceTypeLabel(sourceType) {
+  return RECIPE_SOURCE_LABELS[sourceType] || "Imported Recipe";
+}
+
+function normalizeSourceType(sourceType) {
+  const value = trimToNull(sourceType);
+  return value && RECIPE_SOURCE_TYPES.has(value) ? value : "manual_entry";
+}
+
+function cleanUrl(url) {
+  const value = trimToNull(url);
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return /^www\./i.test(value) ? `https://${value}` : value;
+}
+
+function hostFromUrl(url) {
+  try {
+    return new URL(url).host.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+function inferSourceTypeFromUrl(url) {
+  const host = String(hostFromUrl(url) || "").toLowerCase();
+  if (!host) return "recipe_url";
+  if (/(tiktok|pinterest|instagram|youtube|youtu\.be)/.test(host))
+    return "social_url";
+  return "recipe_url";
+}
+
+function todayIsoDate() {
+  try {
+    return new Date().toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
+function clamp(v, lo = 0, hi = 1) {
+  return Math.max(lo, Math.min(hi, v));
+}
 
 function logEvent(level, event, metadata = {}) {
   const safeMetadata = {};
@@ -51,10 +108,424 @@ function logEvent(level, event, metadata = {}) {
   }
 }
 
+function normalizeRecipeTitle(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
+function normalizeIngredientName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeIngredient(ing) {
+  if (!ing || typeof ing !== "object") return null;
+  const enriched = enrichIngredientFields({
+    id: trimToNull(ing.id) || uid(),
+    name: trimToNull(ing.name) || "",
+    quantity: trimToNull(ing.quantity),
+    unit: trimToNull(ing.unit),
+    confidence: Number.isFinite(Number(ing.confidence))
+      ? clamp(Number(ing.confidence))
+      : 0.7,
+    rawLine: trimToNull(ing.rawLine),
+  });
+  return trimToNull(enriched.name) ? enriched : null;
+}
+
+function normalizeStep(step, index = 0) {
+  if (!step || typeof step !== "object") return null;
+  const instruction = trimToNull(step.instruction || step.text);
+  if (!instruction) return null;
+  return {
+    step: Number.isFinite(Number(step.step)) ? Number(step.step) : index + 1,
+    instruction,
+    temperature: trimToNull(step.temperature),
+    duration: trimToNull(step.duration),
+  };
+}
+
+function inferLegacyRecipeSourceType(recipe) {
+  if (recipe?.sourceType && RECIPE_SOURCE_TYPES.has(recipe.sourceType))
+    return recipe.sourceType;
+  if (Array.isArray(recipe?.steps) && recipe.steps.length && recipe?.meta)
+    return "meal_photo_generated";
+  if (trimToNull(recipe?.sourceUrl))
+    return inferSourceTypeFromUrl(recipe.sourceUrl);
+  if (trimToNull(recipe?.imageDataUrl)) return "cookbook_photo";
+  return "manual_entry";
+}
+
+function normalizeRecipe(recipe) {
+  if (!recipe || typeof recipe !== "object") return null;
+  const ingredients = Array.isArray(recipe.ingredients)
+    ? recipe.ingredients.map(normalizeIngredient).filter(Boolean)
+    : [];
+  const steps = Array.isArray(recipe.steps)
+    ? recipe.steps.map(normalizeStep).filter(Boolean)
+    : [];
+  const sourceType = inferLegacyRecipeSourceType(recipe);
+  const sourceUrl = cleanUrl(recipe.sourceUrl);
+  const createdAt = trimToNull(recipe.createdAt) || new Date().toISOString();
+  return {
+    id: trimToNull(recipe.id) || uid(),
+    name:
+      trimToNull(recipe.name) || trimToNull(recipe.title) || "Untitled Recipe",
+    description: trimToNull(recipe.description),
+    createdAt,
+    updatedAt: trimToNull(recipe.updatedAt) || createdAt,
+    ingredients,
+    imageDataUrl: trimToNull(recipe.imageDataUrl),
+    steps,
+    meta:
+      recipe.meta && typeof recipe.meta === "object"
+        ? {
+            cuisine: trimToNull(recipe.meta.cuisine),
+            servings: trimToNull(recipe.meta.servings),
+            prepTime: trimToNull(recipe.meta.prepTime),
+            cookTime: trimToNull(recipe.meta.cookTime),
+            nutrition: normalizeNutritionMeta(recipe.meta.nutrition),
+          }
+        : null,
+    tags: Array.isArray(recipe.tags)
+      ? recipe.tags.map((tag) => String(tag).trim()).filter(Boolean)
+      : [],
+    sourceType,
+    sourceUrl,
+    sourceTitle: trimToNull(recipe.sourceTitle) || hostFromUrl(sourceUrl),
+    importMethod:
+      trimToNull(recipe.importMethod) ||
+      (sourceType === "meal_photo_generated" ? "meal_photo_ai" : "manual"),
+    importConfidence: Number.isFinite(Number(recipe.importConfidence))
+      ? clamp(Number(recipe.importConfidence))
+      : null,
+    rawImportText: trimToNull(recipe.rawImportText),
+  };
+}
+
+function parseTagsInput(value) {
+  return String(value || "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .filter(
+      (tag, index, arr) =>
+        arr.findIndex((item) => item.toLowerCase() === tag.toLowerCase()) ===
+        index,
+    );
+}
+
+function normalizePantryItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const displayName = trimToNull(item.displayName) || trimToNull(item.name);
+  if (!displayName) return null;
+  return {
+    id: trimToNull(item.id) || uid(),
+    normalizedName: normalizeIngredientName(displayName),
+    displayName,
+    category: trimToNull(item.category) || inferShoppingCategory(displayName),
+    quantity: trimToNull(item.quantity),
+    unit: trimToNull(item.unit),
+    purchaseDate: trimToNull(item.purchaseDate),
+    expirationDate: trimToNull(item.expirationDate),
+    lastUsedDate: trimToNull(item.lastUsedDate),
+    source: trimToNull(item.source) || "manual",
+    isStaple: Boolean(item.isStaple),
+  };
+}
+
+function normalizeDietaryProfile(profile) {
+  const value = profile && typeof profile === "object" ? profile : {};
+  const dietType = trimToNull(value.dietType) || "none";
+  const macroFocus = trimToNull(value.macroFocus) || "balanced";
+  return {
+    dietType: ["none", "vegetarian", "vegan", "pescatarian"].includes(dietType)
+      ? dietType
+      : "none",
+    allergies: Array.isArray(value.allergies)
+      ? value.allergies.map((item) => normalizeIngredientName(item)).filter(Boolean)
+      : parseTagsInput(value.allergies).map((item) => normalizeIngredientName(item)).filter(Boolean),
+    excludedIngredients: Array.isArray(value.excludedIngredients)
+      ? value.excludedIngredients.map((item) => normalizeIngredientName(item)).filter(Boolean)
+      : parseTagsInput(value.excludedIngredients).map((item) => normalizeIngredientName(item)).filter(Boolean),
+    macroFocus: ["balanced", "high_protein", "lower_carb", "budget"].includes(macroFocus)
+      ? macroFocus
+      : "balanced",
+  };
+}
+
+function normalizeNutritionMeta(value) {
+  const nutrition = value && typeof value === "object" ? value : {};
+  const normalizeNumberString = (input) => {
+    const trimmed = trimToNull(input);
+    if (!trimmed) return null;
+    const num = Number(trimmed);
+    return Number.isFinite(num) && num >= 0 ? String(num) : null;
+  };
+  const normalized = {
+    servingSize: trimToNull(nutrition.servingSize),
+    calories: normalizeNumberString(nutrition.calories),
+    proteinG: normalizeNumberString(nutrition.proteinG),
+    carbsG: normalizeNumberString(nutrition.carbsG),
+    fatG: normalizeNumberString(nutrition.fatG),
+    fiberG: normalizeNumberString(nutrition.fiberG),
+    sugarG: normalizeNumberString(nutrition.sugarG),
+  };
+  return Object.values(normalized).some(Boolean) ? normalized : null;
+}
+
+function emptyDraftNutrition() {
+  return {
+    servingSize: "",
+    calories: "",
+    proteinG: "",
+    carbsG: "",
+    fatG: "",
+    fiberG: "",
+    sugarG: "",
+  };
+}
+
+function nutritionBadgesForRecipe(recipe) {
+  const nutrition = normalizeNutritionMeta(recipe?.meta?.nutrition);
+  if (!nutrition) return [];
+
+  const calories = Number(nutrition.calories);
+  const protein = Number(nutrition.proteinG);
+  const carbs = Number(nutrition.carbsG);
+  const fiber = Number(nutrition.fiberG);
+  const badges = [];
+
+  if (Number.isFinite(protein) && protein >= 20) badges.push("High Protein");
+  if (Number.isFinite(carbs) && carbs <= 20) badges.push("Lower Carb");
+  if (Number.isFinite(fiber) && fiber >= 5) badges.push("High Fiber");
+  if (Number.isFinite(calories) && calories <= 450) badges.push("Lighter");
+
+  return badges;
+}
+
+function parseDateOnly(value) {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isoDateFromDate(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfWeekIso(isoDate) {
+  const date = parseDateOnly(isoDate) || new Date();
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return isoDateFromDate(date);
+}
+
+function weekDates(isoDate) {
+  const start = parseDateOnly(startOfWeekIso(isoDate)) || new Date();
+  return Array.from({ length: 7 }, (_, idx) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + idx);
+    return isoDateFromDate(date);
+  });
+}
+
+function addDaysIso(isoDate, days) {
+  const start = parseDateOnly(isoDate) || new Date();
+  start.setDate(start.getDate() + days);
+  return isoDateFromDate(start);
+}
+
+function formatPlanDateLabel(isoDate) {
+  try {
+    return new Date(`${isoDate}T00:00:00`).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return isoDate;
+  }
+}
 
 function recipeById(recipeId) {
   return state.recipes.find((recipe) => recipe.id === recipeId) || null;
+}
+
+function mealSlotLabel(slot) {
+  if (slot === "breakfast") return "Breakfast";
+  if (slot === "lunch") return "Lunch";
+  return "Dinner";
+}
+
+function inferShoppingCategory(name) {
+  const value = String(name || "").toLowerCase();
+  if (/(milk|cheese|butter|yogurt|cream|egg)/.test(value)) return "Dairy";
+  if (/(chicken|beef|pork|turkey|salmon|tuna|shrimp|fish)/.test(value))
+    return "Protein";
+  if (
+    /(apple|banana|lettuce|spinach|onion|garlic|tomato|potato|carrot|avocado|lemon|lime|cilantro|parsley|zucchini|mushroom)/.test(
+      value,
+    )
+  )
+    return "Produce";
+  if (
+    /(rice|pasta|beans|flour|sugar|oil|vinegar|broth|stock|corn|can|package|salt|pepper|paprika|cumin|vanilla)/.test(
+      value,
+    )
+  )
+    return "Pantry";
+  if (/(frozen)/.test(value)) return "Frozen";
+  return "Other";
+}
+
+const PANTRY_DESCRIPTOR_WORDS = new Set([
+  "fresh",
+  "dried",
+  "large",
+  "small",
+  "medium",
+  "extra",
+  "virgin",
+  "ground",
+  "boneless",
+  "skinless",
+  "shredded",
+  "grated",
+  "chopped",
+  "diced",
+  "minced",
+  "sliced",
+  "whole",
+  "plain",
+  "unsalted",
+  "salted",
+  "lean",
+  "low",
+  "fat",
+  "reduced",
+  "organic",
+]);
+
+// Exact equivalents: always safe to merge in shopping lists and pantry matching
+const INGREDIENT_EXACT_ALIASES = {
+  scallions: "green onion",
+  scallion: "green onion",
+  "green onions": "green onion",
+  "spring onions": "green onion",
+  "spring onion": "green onion",
+  "cilantro leaves": "cilantro",
+  "bell peppers": "bell pepper",
+  peppers: "bell pepper",
+  "chicken breasts": "chicken breast",
+  "chicken thighs": "chicken thigh",
+};
+
+// Loose aliases: only used for pantry hint matching, NOT for shopping merge
+// These collapse distinct items into broad groups and can cause false positives
+const PANTRY_LOOSE_ALIASES = {
+  "roma tomatoes": "tomato",
+  "cherry tomatoes": "tomato",
+  "cheddar cheese": "cheese",
+  "parmesan cheese": "cheese",
+  "mozzarella cheese": "cheese",
+  "olive oil": "oil",
+  "vegetable oil": "oil",
+};
+
+// Combined map used only by pantry hint matching (backward compatible)
+const PANTRY_NAME_ALIASES = { ...INGREDIENT_EXACT_ALIASES, ...PANTRY_LOOSE_ALIASES };
+
+function singularizeToken(token) {
+  const value = String(token || "");
+  if (value.endsWith("ies") && value.length > 4)
+    return `${value.slice(0, -3)}y`;
+  if (value.endsWith("oes") && value.length > 4) return value.slice(0, -2);
+  if (
+    value.endsWith("es") &&
+    value.length > 4 &&
+    /(ches|shes|xes|zes|sses)$/.test(value)
+  )
+    return value.slice(0, -2);
+  if (value.endsWith("s") && value.length > 3 && !value.endsWith("ss"))
+    return value.slice(0, -1);
+  return value;
+}
+
+function canonicalPantryName(value) {
+  const normalized = normalizeIngredientName(value);
+  const aliasValue = PANTRY_NAME_ALIASES[normalized] || normalized;
+  return aliasValue
+    .split(" ")
+    .map((token) => singularizeToken(token))
+    .filter((token) => token && !PANTRY_DESCRIPTOR_WORDS.has(token))
+    .join(" ")
+    .trim();
+}
+
+function canonicalShoppingName(value) {
+  const normalized = normalizeIngredientName(value);
+  const aliasValue = INGREDIENT_EXACT_ALIASES[normalized] || normalized;
+  return aliasValue
+    .split(" ")
+    .map((token) => singularizeToken(token))
+    .filter((token) => token && !PANTRY_DESCRIPTOR_WORDS.has(token))
+    .join(" ")
+    .trim();
+}
+
+function shoppingMergeKey(name, unit) {
+  const canonical = canonicalShoppingName(name);
+  const normalUnit = normalizedUnit(unit) || "-";
+  return `${canonical}|${normalUnit}`;
+}
+
+function pantryTokenSet(value) {
+  return new Set(
+    canonicalPantryName(value)
+      .split(" ")
+      .map((token) => token.trim())
+      .filter(Boolean),
+  );
+}
+
+function normalizedUnit(unit) {
+  return normalizeUnitValue(unit) || trimToNull(unit)?.toLowerCase() || null;
+}
+
+function unitFamily(unit) {
+  const value = normalizedUnit(unit);
+  if (!value) return null;
+  if (["oz", "lb", "g", "kg"].includes(value)) return "weight";
+  if (["tsp", "tbsp", "cup"].includes(value)) return "volume";
+  if (["clove", "can", "package"].includes(value)) return "count";
+  return value;
+}
+
+function convertAmountToBase(amount, unit) {
+  if (!Number.isFinite(amount)) return null;
+  const value = normalizedUnit(unit);
+  if (!value) return amount;
+  const factors = {
+    oz: 1,
+    lb: 16,
+    g: 0.035274,
+    kg: 35.274,
+    tsp: 1,
+    tbsp: 3,
+    cup: 48,
+  };
+  return Number.isFinite(factors[value]) ? amount * factors[value] : amount;
 }
 
 function resolvePantryMatch(item) {
@@ -323,6 +794,145 @@ function substitutionSuggestionsForRecipe(recipe, report) {
   return suggestions.slice(0, 6);
 }
 
+function makeDefaultState() {
+  return {
+    recipes: [],
+    activeShoppingList: null,
+    mealPlanEntries: [],
+    pantryItems: [],
+    logs: [],
+    selectedImageDataUrl: null,
+    draftRecipeName: "",
+    draftDescription: "",
+    draftTags: [],
+    draftNutrition: {
+      servingSize: "",
+      calories: "",
+      proteinG: "",
+      carbsG: "",
+      fatG: "",
+      fiberG: "",
+      sugarG: "",
+    },
+    draftIngredients: [],
+    draftSourceType: "manual_entry",
+    draftSourceTitle: "",
+    draftSourceUrl: "",
+    draftImportMethod: "manual",
+    rawOCRText: "",
+    ocrConfidence: 0,
+    ocrSource: null,
+    droppedOCRLines: [],
+    isProcessing: false,
+    scanErrorMessage: null,
+    lowConfidenceWarning: null,
+    showEditor: false,
+    settings: {
+      useCloudFallback: true,
+      lowConfidenceThreshold: 0.7,
+      dietaryProfile: {
+        dietType: "none",
+        allergies: [],
+        excludedIngredients: [],
+        macroFocus: "balanced",
+      },
+    },
+    ui: {
+      activeView: "scan-view",
+      recipeSearch: "",
+      recipeSourceFilter: "all",
+      recipeSort: "newest",
+      recipesCompatibleOnly: false,
+      mealPlanSelectedDate: todayIsoDate(),
+      mealPlanSelectedSlot: "dinner",
+      pantryEditId: null,
+    },
+    detail: { recipeId: null },
+    editingRecipeId: null,
+    pendingConfirm: null,
+    usedSample: false,
+    scanMode: "recipe",
+    selectedImages: [],
+    mealImageDataUrl: null,
+    mealAnalysis: null,
+    draftSteps: [],
+    decay: { result: null, error: null, pending: false },
+  };
+}
+
+function loadState() {
+  const fallback = makeDefaultState();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return {
+      ...fallback,
+      recipes: Array.isArray(parsed.recipes)
+        ? parsed.recipes.map(normalizeRecipe).filter(Boolean)
+        : [],
+      activeShoppingList: parsed.activeShoppingList || null,
+      mealPlanEntries: Array.isArray(parsed.mealPlanEntries)
+        ? parsed.mealPlanEntries
+        : [],
+      pantryItems: Array.isArray(parsed.pantryItems)
+        ? parsed.pantryItems.map(normalizePantryItem).filter(Boolean)
+        : [],
+      logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+      settings: {
+        ...fallback.settings,
+        ...(parsed.settings || {}),
+        dietaryProfile: normalizeDietaryProfile(
+          parsed?.settings?.dietaryProfile || fallback.settings.dietaryProfile,
+        ),
+      },
+      ui: {
+        activeView: NAV_META[parsed?.ui?.activeView]
+          ? parsed.ui.activeView
+          : "scan-view",
+        recipeSearch: trimToNull(parsed?.ui?.recipeSearch) || "",
+        recipeSourceFilter: trimToNull(parsed?.ui?.recipeSourceFilter) || "all",
+        recipeSort: trimToNull(parsed?.ui?.recipeSort) || "newest",
+        recipesCompatibleOnly: Boolean(parsed?.ui?.recipesCompatibleOnly),
+        mealPlanSelectedDate:
+          trimToNull(parsed?.ui?.mealPlanSelectedDate) || todayIsoDate(),
+        mealPlanSelectedSlot:
+          trimToNull(parsed?.ui?.mealPlanSelectedSlot) || "dinner",
+        pantryEditId: trimToNull(parsed?.ui?.pantryEditId) || null,
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+let state = loadState();
+
+function saveState() {
+  const payload = {
+    recipes: state.recipes,
+    activeShoppingList: state.activeShoppingList,
+    mealPlanEntries: state.mealPlanEntries,
+    pantryItems: state.pantryItems,
+    logs: state.logs,
+    settings: state.settings,
+    ui: {
+      activeView: state.ui.activeView,
+      recipeSearch: state.ui.recipeSearch,
+      recipeSourceFilter: state.ui.recipeSourceFilter,
+      recipeSort: state.ui.recipeSort,
+      recipesCompatibleOnly: !!state.ui.recipesCompatibleOnly,
+      mealPlanSelectedDate: state.ui.mealPlanSelectedDate,
+      mealPlanSelectedSlot: state.ui.mealPlanSelectedSlot,
+      pantryEditId: state.ui.pantryEditId,
+    },
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    /* quota */
+  }
+}
 
 // ─── DOM References ───
 const $ = (id) => document.getElementById(id);
@@ -383,10 +993,10 @@ const dom = {
   cloudToggle: $("cloud-toggle"),
   thresholdSlider: $("threshold-slider"),
   thresholdValue: $("threshold-value"),
-  profileHousehold: $("profile-household"),
-  profileMeals: $("profile-meals"),
   decayCategory: $("decay-category"),
   decayQuantity: $("decay-quantity"),
+  decayHousehold: $("decay-household"),
+  decayMeals: $("decay-meals"),
   decayStaple: $("decay-staple"),
   decayDate: $("decay-date"),
   decayRunBtn: $("decay-run-btn"),
@@ -598,6 +1208,22 @@ function shoppingListFromMealPlan(entries) {
   return list;
 }
 
+function enrichIngredientFields(ing) {
+  const enriched = { ...ing };
+  const missingQty = !trimToNull(enriched.quantity);
+  const missingUnit = !trimToNull(enriched.unit);
+  if (!enriched.rawLine || (!missingQty && !missingUnit)) return enriched;
+  const reparsed = parseIngredientLine(
+    String(enriched.rawLine),
+    enriched.confidence || 0.6,
+  );
+  if (!reparsed) return enriched;
+  if (missingQty && trimToNull(reparsed.quantity))
+    enriched.quantity = trimToNull(reparsed.quantity);
+  if (missingUnit && trimToNull(reparsed.unit))
+    enriched.unit = trimToNull(reparsed.unit);
+  return enriched;
+}
 
 function deriveRecipeName(rawText) {
   const lines = String(rawText || "")
@@ -1288,8 +1914,6 @@ function renderSettings() {
   if (dom.allergiesInput) dom.allergiesInput.value = dietaryProfile.allergies.join(", ");
   if (dom.excludedIngredientsInput) dom.excludedIngredientsInput.value = dietaryProfile.excludedIngredients.join(", ");
   if (dom.macroFocusSelect) dom.macroFocusSelect.value = dietaryProfile.macroFocus;
-  if (dom.profileHousehold) dom.profileHousehold.value = dietaryProfile.householdSize;
-  if (dom.profileMeals) dom.profileMeals.value = dietaryProfile.mealsPerWeek;
   if (dom.decayDate && !dom.decayDate.value) {
     dom.decayDate.value = todayIsoDate();
   }
@@ -2160,22 +2784,27 @@ function readDecayForm() {
   }
 
   const quantity = Number(dom.decayQuantity?.value);
+  const household = Number(dom.decayHousehold?.value);
+  const meals = Number(dom.decayMeals?.value);
   const staple = Number(dom.decayStaple?.value);
   const category = String(dom.decayCategory?.value || "").trim();
   const purchaseDate = String(dom.decayDate?.value || "").trim();
-  const profile = normalizeDietaryProfile(state.settings?.dietaryProfile);
 
   if (!category) return { error: "Select a category." };
   if (!Number.isFinite(quantity) || quantity <= 0)
     return { error: "Quantity must be a positive number." };
+  if (!Number.isFinite(household) || household < 1)
+    return { error: "Household size must be 1 or more." };
+  if (!Number.isFinite(meals) || meals < 1)
+    return { error: "Meals per week must be 1 or more." };
   if (![0, 1].includes(staple)) return { error: "Staple must be Yes or No." };
 
   return {
     payload: {
       item_category: category,
       quantity_oz: quantity,
-      household_size: profile.householdSize,
-      meals_per_week: profile.mealsPerWeek,
+      household_size: household,
+      meals_per_week: meals,
       is_staple: staple,
       purchase_date: purchaseDate || undefined,
     },
@@ -2424,8 +3053,6 @@ function saveDietaryProfileFromForm() {
     allergies: dom.allergiesInput?.value,
     excludedIngredients: dom.excludedIngredientsInput?.value,
     macroFocus: dom.macroFocusSelect?.value,
-    householdSize: dom.profileHousehold?.value,
-    mealsPerWeek: dom.profileMeals?.value,
   });
   logEvent("info", "dietary_profile_updated", {
     diet_type: state.settings.dietaryProfile.dietType,
@@ -2497,17 +3124,16 @@ function decayPayloadFromPantryItem(pantryItem) {
   if (!Number.isFinite(quantityOz) || quantityOz <= 0) {
     return { error: "This pantry item needs a quantity in ounces, pounds, grams, kilograms, cups, tablespoons, or teaspoons before ML can estimate runout." };
   }
-  const profile = normalizeDietaryProfile(state.settings?.dietaryProfile);
+  const householdSize = Number(dom.decayHousehold?.value || 3);
+  const mealsPerWeek = Number(dom.decayMeals?.value || 7);
   return {
     payload: {
       item_category: mapPantryCategoryToDecay(pantryItem.category),
       quantity_oz: quantityOz,
-      household_size: profile.householdSize,
-      meals_per_week: profile.mealsPerWeek,
+      household_size: Number.isFinite(householdSize) && householdSize > 0 ? householdSize : 3,
+      meals_per_week: Number.isFinite(mealsPerWeek) && mealsPerWeek > 0 ? mealsPerWeek : 7,
       is_staple: pantryItem.isStaple || pantryItem.category === "Pantry" ? 1 : 0,
       purchase_date: pantryItem.purchaseDate || undefined,
-      item_name: pantryItem.displayName || pantryItem.normalizedName || "",
-      storage_method: pantryItem.storageMethod || "refrigerated",
     },
   };
 }
@@ -2707,10 +3333,9 @@ async function runDecayCheckFromShoppingItem(itemId) {
   const { payload } = decayPayloadFromPantryItem(pantryMatch);
   const result = await runDecayCheckForPantryItem(pantryMatch, "shopping");
   if (!result) return;
-  const profile = normalizeDietaryProfile(state.settings?.dietaryProfile);
-  const householdSize = payload?.household_size ?? profile.householdSize;
-  const mealsPerWeek = payload?.meals_per_week ?? profile.mealsPerWeek;
-  const usingDefaults = profile.householdSize === 3 && profile.mealsPerWeek === 7;
+  const householdSize = payload?.household_size ?? 3;
+  const mealsPerWeek = payload?.meals_per_week ?? 7;
+  const householdDefaults = !dom.decayHousehold?.value && !dom.decayMeals?.value;
   shoppingItem.mlInsight = {
     finalUseByDate: result.final_use_by_date || null,
     predictedDays: result.predicted_days_to_empty ?? null,
@@ -2719,7 +3344,7 @@ async function runDecayCheckFromShoppingItem(itemId) {
     pantryName: pantryMatch.displayName,
     householdSize,
     mealsPerWeek,
-    usingDefaults,
+    usingDefaults: householdDefaults,
   };
   logEvent("info", "shopping_item_ml_checked", {
     item_id: itemId,
@@ -3261,12 +3886,6 @@ function bindEvents() {
   }
   if (dom.macroFocusSelect) {
     dom.macroFocusSelect.addEventListener("change", saveDietaryProfileFromForm);
-  }
-  if (dom.profileHousehold) {
-    dom.profileHousehold.addEventListener("change", saveDietaryProfileFromForm);
-  }
-  if (dom.profileMeals) {
-    dom.profileMeals.addEventListener("change", saveDietaryProfileFromForm);
   }
 
   if (dom.decayRunBtn) {
